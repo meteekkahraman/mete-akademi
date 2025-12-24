@@ -19,7 +19,7 @@ export default function Pomodoro({
     // Haftalık sıralamayı kontrol et
     const checkRank = async () => {
       try {
-        const res = await fetch('http://127.0.0.1:5002/api/leaderboard?period=weekly');
+        const res = await fetch('https://mete-akademi.onrender.com/api/leaderboard?period=weekly');
         const data = await res.json();
         // İlk 3 kişiden biri ben miyim?
         const myRank = data.findIndex(u => u._id === currentUser);

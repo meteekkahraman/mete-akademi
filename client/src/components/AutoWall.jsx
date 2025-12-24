@@ -7,7 +7,7 @@ export default function AutoWall() {
   useEffect(() => {
     const fetchPosts = async () => {
       try {
-        const res = await fetch('http://127.0.0.1:5002/api/posts');
+        const res = await fetch('https://mete-akademi.onrender.com/api/posts');
         setPosts(await res.json());
       } catch(e) {}
     };

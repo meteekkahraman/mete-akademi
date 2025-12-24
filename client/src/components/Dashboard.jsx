@@ -39,15 +39,15 @@ export default function Dashboard({ currentUser, userRole, onLogout }) {
   const currentDayName = new Date().toLocaleDateString('tr-TR', { weekday: 'long' });
 
   useEffect(() => { fetchExams(); fetchProgram(); fetchLogs(); }, [currentUser]);
-  const fetchExams = async () => { const res = await fetch(`http://127.0.0.1:5002/api/exams?username=${currentUser}`); setExams(await res.json()); };
-  const fetchProgram = async () => { const res = await fetch(`http://127.0.0.1:5002/api/program?username=${currentUser}`); setPrograms(await res.json()); };
-  const fetchLogs = async () => { try { const res = await fetch(`http://127.0.0.1:5002/api/studylogs?username=${currentUser}`); setStudyLogs(await res.json()); } catch(e) { setStudyLogs([]); } };
+  const fetchExams = async () => { const res = await fetch(`https://mete-akademi.onrender.com/api/exams?username=${currentUser}`); setExams(await res.json()); };
+  const fetchProgram = async () => { const res = await fetch(`https://mete-akademi.onrender.com/api/program?username=${currentUser}`); setPrograms(await res.json()); };
+  const fetchLogs = async () => { try { const res = await fetch(`https://mete-akademi.onrender.com/api/studylogs?username=${currentUser}`); setStudyLogs(await res.json()); } catch(e) { setStudyLogs([]); } };
 
   // --- GÜVENLİ ÇIKIŞ FONKSİYONU (YENİ EKLENDİ) ---
   const handleSafeLogout = async () => {
     // 1. Sunucuya "Ben odadan çıkıyorum" de
     try {
-      await fetch('http://127.0.0.1:5002/api/rooms/leave', {
+      await fetch('https://mete-akademi.onrender.com/api/rooms/leave', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: currentUser })
@@ -77,13 +77,13 @@ export default function Dashboard({ currentUser, userRole, onLogout }) {
 
   const handlePomoFinish = async () => {
     alert("Tebrikler! Çalışma tamamlandı.");
-    const res = await fetch('http://127.0.0.1:5002/api/studylogs', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ username: currentUser, lesson: pomoLesson, topic: 'Odaklanma', type: 'pomodoro', duration: 25 }) });
+    const res = await fetch('hhttps://mete-akademi.onrender.com/api/studylogs', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ username: currentUser, lesson: pomoLesson, topic: 'Odaklanma', type: 'pomodoro', duration: 25 }) });
     const data = await res.json(); setXp(data.newXP); setTitle(data.newTitle); fetchLogs();
   };
 
-  const addExam = async () => { await fetch('http://127.0.0.1:5002/api/exams', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({username:currentUser, lesson, net, date: new Date().toLocaleDateString()}) }); setNet(''); fetchExams(); };
-  const deleteItem = async (type, id) => { if(!confirm('Silinsin mi?')) return; await fetch(`http://127.0.0.1:5002/api/${type}/${id}`, { method: 'DELETE' }); if(type==='exams') fetchExams(); else fetchProgram(); };
-  const addProgram = async () => { if (!startTime || !endTime) return alert("Saat girin!"); await fetch('http://127.0.0.1:5002/api/program', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({username:currentUser, day:progDay, time:`${startTime} - ${endTime}`, lesson:progLesson, topic:progTopic}) }); fetchProgram(); };
+  const addExam = async () => { await fetch('https://mete-akademi.onrender.com/api/exams', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({username:currentUser, lesson, net, date: new Date().toLocaleDateString()}) }); setNet(''); fetchExams(); };
+  const deleteItem = async (type, id) => { if(!confirm('Silinsin mi?')) return; await fetch(`https://mete-akademi.onrender.com/api/${type}/${id}`, { method: 'DELETE' }); if(type==='exams') fetchExams(); else fetchProgram(); };
+  const addProgram = async () => { if (!startTime || !endTime) return alert("Saat girin!"); await fetch('https://mete-akademi.onrender.com/api/program', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({username:currentUser, day:progDay, time:`${startTime} - ${endTime}`, lesson:progLesson, topic:progTopic}) }); fetchProgram(); };
   const downloadPDF = () => { const doc = new jsPDF(); doc.text(`METOSOR AKADEMI - ${currentUser}`, 14, 20); const tableData = programs.map(p => [p.day, p.time, p.lesson, p.topic]); autoTable(doc, { startY: 30, head: [['GÜN', 'SAAT', 'DERS', 'KONU']], body: tableData }); doc.save('program.pdf'); };
 
   // CSS STYLES (DÜZENLENDİ - TAŞMALAR ENGELLENDİ)

@@ -25,7 +25,7 @@ export default function StudyRooms({ currentUser }) {
   }, []);
 
   const fetchActiveUsers = async () => {
-    try { const res = await fetch('http://127.0.0.1:5002/api/rooms/active'); setActiveUsers(await res.json()); } catch(e) {}
+    try { const res = await fetch('https://mete-akademi.onrender.com/api/rooms/active'); setActiveUsers(await res.json()); } catch(e) {}
   };
 
   const handleJoinRequest = (catId, roomIndex, catName) => {
@@ -34,7 +34,7 @@ export default function StudyRooms({ currentUser }) {
   };
 
   const joinRoom = async (roomId, topic) => {
-    await fetch('http://127.0.0.1:5002/api/rooms/join', {
+    await fetch('https://mete-akademi.onrender.com/api/rooms/join', {
       method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ username: currentUser, roomId, topic })
     });
     setShowModal(false);
@@ -45,7 +45,7 @@ export default function StudyRooms({ currentUser }) {
   };
 
   const leaveRoom = async () => {
-    await fetch('http://127.0.0.1:5002/api/rooms/leave', {
+    await fetch('https://mete-akademi.onrender.com/api/rooms/leave', {
       method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ username: currentUser })
     });
     setCurrentView('lobby');

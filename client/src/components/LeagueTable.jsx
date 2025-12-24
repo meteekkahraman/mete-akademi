@@ -7,7 +7,7 @@ export default function LeagueTable({ currentUser }) {
   const [friendEmail, setFriendEmail] = useState('');
 
   const fetchLeaderboard = async () => {
-    const res = await fetch(`http://127.0.0.1:5002/api/leaderboard?period=${period}&username=${currentUser}`);
+    const res = await fetch(`https://mete-akademi.onrender.com/api/leaderboard?period=${period}&username=${currentUser}`);
     setLeaderboard(await res.json());
   };
 
@@ -15,7 +15,7 @@ export default function LeagueTable({ currentUser }) {
 
   const addFriend = async () => {
     if(!friendEmail) return;
-    const res = await fetch('http://127.0.0.1:5002/api/friends/add', {
+    const res = await fetch('https://mete-akademi.onrender.com/api/friends/add', {
       method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({currentUser, friendEmail})
     });
     const data = await res.json();

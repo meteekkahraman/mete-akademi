@@ -18,7 +18,7 @@ export default function Auth({ onLoginSuccess }) {
 
     try {
       const bodyData = endpoint === 'register' ? { username, firstName, lastName, email, password } : { email, password };
-      const res = await fetch(`http://127.0.0.1:5002/api/${endpoint}`, { 
+      const res = await fetch(`https://mete-akademi.onrender.com/api/${endpoint}`, { 
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(bodyData) 
       });
       const data = await res.json();

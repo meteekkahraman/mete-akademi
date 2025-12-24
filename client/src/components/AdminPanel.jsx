@@ -16,8 +16,8 @@ export default function AdminPanel() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const s = await fetch('http://127.0.0.1:5002/api/admin/stats').then(r=>r.json());
-      const u = await fetch('http://127.0.0.1:5002/api/admin/users').then(r=>r.json());
+      const s = await fetch('https://mete-akademi.onrender.com/api/admin/stats').then(r=>r.json());
+      const u = await fetch('https://mete-akademi.onrender.com/api/admin/users').then(r=>r.json());
       setStats(s); setUsers(u);
     } catch(e) { console.error(e); }
     setLoading(false);
@@ -28,7 +28,7 @@ export default function AdminPanel() {
   const openUserDetail = async (user) => {
     setSelectedUser(user);
     try {
-      const res = await fetch(`http://127.0.0.1:5002/api/studylogs?username=${user.username}`);
+      const res = await fetch(`https://mete-akademi.onrender.com/api/studylogs?username=${user.username}`);
       if(res.ok) setUserLogs(await res.json());
     } catch (e) {}
   };
@@ -36,7 +36,7 @@ export default function AdminPanel() {
   // BANLAMA FONKSİYONU
   const toggleBan = async (userId) => {
     if(!confirm("Kullanıcının erişimini değiştirmek istediğine emin misin?")) return;
-    await fetch('http://127.0.0.1:5002/api/admin/toggle-ban', {
+    await fetch('https://mete-akademi.onrender.com/api/admin/toggle-ban', {
       method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({userId})
     });
     fetchData();
@@ -46,7 +46,7 @@ export default function AdminPanel() {
   const toggleRole = async (userId) => {
     if(!confirm("Bu kullanıcının Yönetici yetkisini değiştirmek üzeresin. Emin misin?")) return;
     
-    const res = await fetch('http://127.0.0.1:5002/api/admin/toggle-role', {
+    const res = await fetch('https://mete-akademi.onrender.com/api/admin/toggle-role', {
       method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({userId})
     });
     const data = await res.json();
