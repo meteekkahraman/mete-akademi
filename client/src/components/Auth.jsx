@@ -42,7 +42,7 @@ export default function Auth({ onLoginSuccess }) {
   return (
     <div style={containerStyle}>
       <div style={formStyle}>
-        <h2 style={{ color: '#60a5fa', marginBottom: '20px' }}>{isLogin ? 'METOSOR GİRİŞ' : 'KAYIT OL'}</h2>
+        <h2 style={{ color: '#60a5fa', marginBottom: '20px' }}>{isLogin ? 'KULLANICI GİRİŞ' : 'KAYIT OL'}</h2>
         
         {!isLogin && (
           <>
