@@ -28,18 +28,13 @@ const UserSchema = new mongoose.Schema({
 });
 const User = mongoose.model('User', UserSchema);
 
-// YENİ: Konu Çalışma Geçmişi (Tarihli Soru Takibi İçin)
+// Konu Çalışma Geçmişi
 const TopicLogSchema = new mongoose.Schema({
-  username: String,
-  lesson: String,
-  topic: String,
-  count: Number,
-  date: String, // YYYY-MM-DD formatında tutacağız
-  timestamp: { type: Date, default: Date.now }
+  username: String, lesson: String, topic: String, count: Number, date: String, timestamp: { type: Date, default: Date.now }
 });
 const TopicLog = mongoose.model('TopicLog', TopicLogSchema);
 
-// Konu İlerleme Durumu (Tik Kutusu)
+// Konu İlerleme Durumu
 const ProgressSchema = new mongoose.Schema({ 
   username: String, lesson: String, topic: String, isCompleted: { type: Boolean, default: false } 
 });
@@ -48,60 +43,89 @@ const Progress = mongoose.model('Progress', ProgressSchema);
 // Diğer Modeller
 const StudyLog = mongoose.model('StudyLog', new mongoose.Schema({ username: String, lesson: String, topic: String, type: String, duration: Number, date: String, timestamp: { type: Date, default: Date.now } }));
 const Post = mongoose.model('Post', new mongoose.Schema({ username: String, content: String, date: { type: Date, default: Date.now }, isSystem: { type: Boolean, default: false } }));
-const Exam = mongoose.model('Exam', new mongoose.Schema({ username: String, lesson: String, topic: String, net: Number, date: String })); // topic eklenebilir ama şimdilik standart
+const Exam = mongoose.model('Exam', new mongoose.Schema({ username: String, lesson: String, topic: String, net: Number, date: String })); 
 const Program = mongoose.model('Program', new mongoose.Schema({ username: String, day: String, time: String, lesson: String, topic: String }));
 const Question = mongoose.model('Question', new mongoose.Schema({ username: String, lesson: String, topic: String, count: Number, date: String, timestamp: { type: Date, default: Date.now } }));
 
 
 // --- ROTALAR ---
 
-// 1. YENİ GELİŞMİŞ KONU TAKİP SİSTEMİ
-// A. İlerlemeleri Getir
+// 1. SORU TAKİP SİSTEMİ (GÜNCELLENDİ - LİMİT KORUMALI)
+app.get('/api/questions', async (req, res) => { 
+  res.json(await Question.find({ username: req.query.username }).sort({ timestamp: -1 })); 
+});
+
+app.post('/api/questions', async (req, res) => {
+  try {
+    const { username, lesson, topic, count, date } = req.body;
+    const countVal = Number(count);
+
+    // -- Validasyonlar --
+    if (!count || isNaN(countVal) || countVal <= 0) {
+      return res.status(400).json({ error: "Geçersiz soru sayısı." });
+    }
+    if (countVal > 120) {
+      return res.status(400).json({ error: "Tek seferde 120'den fazla soru giremezsiniz." });
+    }
+
+    // -- Günlük Limit Kontrolü --
+    // Gelen tarih formatı (DD.MM.YYYY) ile veritabanını eşleştiriyoruz
+    const existingRecords = await Question.find({ username, lesson, topic, date });
+    const currentTotal = existingRecords.reduce((acc, curr) => acc + (curr.count || 0), 0);
+
+    if (currentTotal + countVal > 120) {
+      return res.status(400).json({ 
+        error: `Günlük limit dolu! Bugün toplam ${currentTotal} soru çözdünüz.` 
+      });
+    }
+
+    // -- Kayıt --
+    await new Question(req.body).save();
+    res.json({ msg: "Ok" });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Sunucu hatası" });
+  }
+});
+
+app.delete('/api/questions/:id', async (req, res) => { 
+    await Question.findByIdAndDelete(req.params.id); 
+    res.json({msg:"Ok"}); 
+});
+
+
+// 2. KONU İLERLEME SİSTEMİ
 app.get('/api/progress', async (req, res) => { 
   res.json(await Progress.find({ username: req.query.username })); 
 });
-
-// B. Konuyu İşaretle (Tik At / Kaldır)
 app.post('/api/progress', async (req, res) => {
     const { username, lesson, topic } = req.body;
     const existing = await Progress.findOne({ username, lesson, topic });
-    
     if (existing) {
-        // Varsa durumunu tersine çevir (Check <-> Uncheck)
         existing.isCompleted = !existing.isCompleted;
         await existing.save();
         res.json({ status: existing.isCompleted ? 'completed' : 'removed' });
     } else {
-        // Yoksa yeni oluştur ve tamamlandı yap
         await new Progress({ username, lesson, topic, isCompleted: true }).save();
         res.json({ status: 'completed' });
     }
 });
-
-// C. Konu Geçmişi Ekle (Soru Sayısı & Tarih)
 app.post('/api/topic/log', async (req, res) => {
   const { username, lesson, topic, count, date } = req.body;
   await new TopicLog({ username, lesson, topic, count, date }).save();
-  
-  // Kullanıcıya XP verelim (Motivasyon)
   const user = await User.findOne({ username });
-  if (user) {
-      user.xp += Math.floor(count * 0.5); // Her soru için 0.5 XP
-      await user.save();
-  }
-  res.json({ msg: "Log başarıyla eklendi" });
+  if (user) { user.xp += Math.floor(count * 0.5); await user.save(); }
+  res.json({ msg: "Log eklendi" });
 });
-
-// D. Konu Geçmişini Getir (Rapor İçin)
 app.get('/api/topic/logs', async (req, res) => {
   const { username, lesson, topic } = req.query;
-  // Tarihe göre yeniden eskiye sırala
   const logs = await TopicLog.find({ username, lesson, topic }).sort({ date: -1 });
   res.json(logs);
 });
 
 
-// 2. ADMIN İSTATİSTİKLERİ & YÖNETİM
+// 3. ADMIN İSTATİSTİKLERİ & YÖNETİM
 app.get('/api/admin/stats', async (req, res) => {
   try {
     const totalUsers = await User.countDocuments({ role: 'student' });
@@ -110,7 +134,6 @@ app.get('/api/admin/stats', async (req, res) => {
     const activeUsersToday = await User.countDocuments({ lastLogin: { $gte: new Date(Date.now() - 24*60*60*1000) } });
     const totalPomodoro = await StudyLog.aggregate([{ $match: { type: 'pomodoro' } }, { $group: { _id: null, totalMinutes: { $sum: "$duration" } } }]);
     
-    // Grafikler
     const lessonDistribution = await StudyLog.aggregate([{ $match: { type: 'pomodoro' } }, { $group: { _id: "$lesson", count: { $sum: 1 } } }, { $sort: { count: -1 } }, { $limit: 5 }]);
     const hourlyActivity = await StudyLog.aggregate([{ $match: { timestamp: { $gte: new Date(Date.now() - 24*60*60*1000) } } }, { $group: { _id: { $hour: "$timestamp" }, count: { $sum: 1 } } }, { $sort: { "_id": 1 } }]);
     const recentActivity = await StudyLog.find().sort({ timestamp: -1 }).limit(10).lean();
@@ -145,7 +168,6 @@ app.get('/api/admin/users', async (req, res) => {
   } catch (e) { res.status(500).json({ error: "Users hatası" }); }
 });
 
-// BANLAMA
 app.post('/api/admin/toggle-ban', async (req, res) => {
   const { userId } = req.body;
   const user = await User.findById(userId);
@@ -154,7 +176,6 @@ app.post('/api/admin/toggle-ban', async (req, res) => {
   res.json({msg:"Ok"});
 });
 
-// YETKİ VERME / ALMA
 app.post('/api/admin/toggle-role', async (req, res) => {
   const { userId } = req.body;
   const user = await User.findById(userId);
@@ -165,7 +186,7 @@ app.post('/api/admin/toggle-role', async (req, res) => {
 });
 
 
-// 3. ODA SİSTEMİ
+// 4. ODA SİSTEMİ
 app.get('/api/rooms/active', async (req, res) => {
   const activeLimit = new Date(Date.now() - 1 * 60 * 60 * 1000); 
   res.json(await User.find({ "currentRoom.id": { $ne: 'offline' }, lastLogin: { $gte: activeLimit } }, 'username currentRoom title xp'));
@@ -181,7 +202,7 @@ app.post('/api/rooms/leave', async (req, res) => {
 });
 
 
-// 4. AUTH
+// 5. AUTH
 app.post('/api/register', async (req, res) => {
   const { username, firstName, lastName, email, password } = req.body;
   const hashedPassword = await bcrypt.hash(password, 10);
@@ -201,7 +222,7 @@ app.post('/api/login', async (req, res) => {
 });
 
 
-// 5. DİĞER FONKSİYONLAR
+// 6. DİĞER FONKSİYONLAR
 app.get('/api/studylogs', async (req, res) => { res.json(await StudyLog.find({ username: req.query.username }).sort({ timestamp: -1 })); });
 app.post('/api/studylogs', async (req, res) => {
   const { username, duration, lesson } = req.body;
@@ -213,6 +234,7 @@ app.post('/api/studylogs', async (req, res) => {
   if (duration >= 25) await new Post({ username: 'SİSTEM', content: `🔥 ${username}, ${lesson} ile alev aldı!`, isSystem: true }).save();
   res.json({ newXP: user.xp, newTitle: user.title });
 });
+
 app.get('/api/leaderboard', async (req, res) => {
   const { period, username } = req.query;
   let dateFilter = new Date(0);
@@ -233,13 +255,16 @@ app.get('/api/leaderboard', async (req, res) => {
 app.get('/api/exams', async (req, res) => { res.json(await Exam.find({ username: req.query.username })); });
 app.post('/api/exams', async (req, res) => { await new Exam(req.body).save(); res.json({msg:"Ok"}); });
 app.delete('/api/exams/:id', async (req, res) => { await Exam.findByIdAndDelete(req.params.id); res.json({msg:"Ok"}); });
+
 app.get('/api/program', async (req, res) => { res.json(await Program.find({ username: req.query.username })); });
 app.post('/api/program', async (req, res) => { await new Program(req.body).save(); res.json({msg:"Ok"}); });
 app.delete('/api/program/:id', async (req, res) => { await Program.findByIdAndDelete(req.params.id); res.json({msg:"Ok"}); });
-app.get('/api/questions', async (req, res) => { res.json(await Question.find({ username: req.query.username }).sort({ timestamp: -1 })); });
-app.post('/api/questions', async (req, res) => { await new Question(req.body).save(); res.json({msg:"Ok"}); });
+
 app.get('/api/posts', async (req, res) => { res.json(await Post.find().sort({ date: -1 }).limit(20)); });
+
 app.get('/api/friends', async (req, res) => { const user = await User.findOne({username: req.query.username}); res.json(user ? user.friends : []); });
 app.post('/api/friends/add', async (req, res) => { const { currentUser, friendEmail } = req.body; const friend = await User.findOne({email: friendEmail}); const me = await User.findOne({username: currentUser}); if(!friend) return res.status(404).json({error:"Bulunamadı"}); if(me.friends.includes(friend.username)) return res.status(400).json({error:"Zaten ekli"}); me.friends.push(friend.username); await me.save(); res.json({msg: "Eklendi"}); });
 
-app.listen(5002, () => console.log("✅ Sunucu 5002 portunda (PRO KONU TAKİBİ) çalışıyor"));
+// SERVER BAŞLATMA
+const PORT = process.env.PORT || 5001;
+app.listen(PORT, () => console.log(`✅ Sunucu ${PORT} portunda çalışıyor`));
