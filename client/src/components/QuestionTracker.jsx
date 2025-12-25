@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { PlusCircle, Target, Trash2, Filter, Layers, AlertCircle } from 'lucide-react'; // AlertCircle eklendi
+import { PlusCircle, Target, Trash2, Filter, Layers, AlertTriangle } from 'lucide-react';
 import { curriculum, lessonsList } from '../data'; 
 
 export default function QuestionTracker({ currentUser }) {
@@ -30,60 +30,87 @@ export default function QuestionTracker({ currentUser }) {
 
   useEffect(() => { fetchQuestions(); }, [currentUser]);
 
-  // --- GELİŞTİRİLMİŞ SORU EKLEME FONKSİYONU ---
+  // --- YARDIMCI: BUGÜNÜN TARİHİNİ METİN OLARAK AL ---
+  // Bu fonksiyon her zaman "25.12.2025" gibi string döndürür.
+  const getTodayString = () => {
+    return new Date().toLocaleDateString('tr-TR'); 
+  };
+
+  // --- SORU EKLEME FONKSİYONU ---
   const addQuestion = async () => {
-    const countVal = parseInt(qCount);
+    const countVal = Number(qCount);
 
-    // 1. BOŞ GİRİŞ KONTROLÜ
+    // 1. TEMEL KONTROLLER
     if (!qCount || isNaN(countVal) || countVal <= 0) {
-      return alert("Lütfen geçerli bir soru sayısı girin!");
+      return alert("Lütfen geçerli bir sayı girin!");
     }
 
-    // 2. TEK SEFERDE MAKSİMUM GİRİŞ LİMİTİ (Kesin Engel)
     if (countVal > 120) {
-      return alert("❌ HATA: Tek seferde en fazla 120 soru girişi yapabilirsiniz!\n(Gerçekçi olalım, tek oturuşta 500 soru çözmedin 😉)");
+      return alert("❌ TEK SEFERDE LİMİT AŞIMI!\nTek seferde en fazla 120 soru girebilirsin.");
     }
 
-    // 3. GÜNLÜK TOPLAM LİMİT KONTROLÜ (Bugün + Bu Konu)
-    // Bugünün tarihini al (Format: 'DD.MM.YYYY' - Backendi'n formatına uyumlu olmalı)
-    const todayStr = new Date().toLocaleDateString(); 
+    // 2. GÜNLÜK TOPLAM KONTROLÜ (METİN KARŞILAŞTIRMASI İLE)
+    const todayStr = getTodayString(); // Örn: "25.12.2025"
 
-    // Sadece BUGÜN, SEÇİLİ DERS ve SEÇİLİ KONU için girilmiş soruları bul
-    const todayEntries = questions.filter(q => 
-      q.lesson === qLesson && 
-      q.topic === qTopic && 
-      q.date === todayStr // Backendden gelen tarih formatıyla eşleşmeli
-    );
+    // Konsola yazdıralım ki hatayı görebilelim (F12 ile bakabilirsin)
+    console.log("Bugünün Tarihi:", todayStr);
 
-    // Bugün bu konu için toplam kaç soru girilmiş?
-    const currentDailyTotal = todayEntries.reduce((acc, curr) => acc + curr.count, 0);
+    const todayEntries = questions.filter(q => {
+      // 1. Ders ve Konu aynı mı?
+      if (q.lesson !== qLesson || q.topic !== qTopic) return false;
 
-    // Eğer (Mevcut Günlük Toplam + Yeni Girilen) > 120 ise DURDUR.
+      // 2. Veritabanındaki tarih bugüne eşit mi?
+      // Backend'den gelen tarih formatı ne olursa olsun kontrol ediyoruz:
+      let dbDateStr = "";
+      
+      if (q.date) {
+        // Eğer backend "25.12.2025" diye kaydediyorsa direkt alırız
+        dbDateStr = q.date; 
+      } else if (q.timestamp) {
+        // Eğer timestamp varsa onu TR formatına çeviririz
+        dbDateStr = new Date(q.timestamp).toLocaleDateString('tr-TR');
+      }
+
+      // İki metni karşılaştır: "25.12.2025" === "25.12.2025"
+      return dbDateStr === todayStr;
+    });
+
+    const currentDailyTotal = todayEntries.reduce((acc, curr) => acc + Number(curr.count), 0);
+
+    console.log(`Mevcut Toplam: ${currentDailyTotal}, Eklenmek İstenen: ${countVal}`);
+
     if (currentDailyTotal + countVal > 120) {
-      const remainingLimit = 120 - currentDailyTotal;
-      return alert(`⚠️ GÜNLÜK LİMİT AŞIMI\n\nBu konu (${qTopic}) için bugün zaten ${currentDailyTotal} soru girdin.\nGünlük limit 120 sorudur.\n\nKalan hakkın: ${remainingLimit > 0 ? remainingLimit : 0}`);
+      const remaining = 120 - currentDailyTotal;
+      return alert(`⚠️ GÜNLÜK LİMİT DOLDU!\n\nBugün "${qTopic}" konusunda zaten ${currentDailyTotal} soru girmişsin.\nKalan hakkın: ${remaining > 0 ? remaining : 0}`);
     }
 
-    // KONTROLLER GEÇİLDİ, KAYDET
+    // 3. KAYDETME İŞLEMİ
     try {
       const res = await fetch('http://localhost:5001/api/questions', {
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: currentUser, lesson: qLesson, topic: qTopic, count: countVal })
+        body: JSON.stringify({ 
+          username: currentUser, 
+          lesson: qLesson, 
+          topic: qTopic, 
+          count: countVal,
+          date: todayStr, // Tarihi direkt string olarak gönderiyoruz "25.12.2025"
+          timestamp: new Date().toISOString()
+        })
       });
       
       if (res.ok) {
         setQCount(''); 
-        fetchQuestions(); // Listeyi güncelle
+        fetchQuestions(); 
+        alert("✅ Kayıt Başarılı!");
       }
     } catch (error) {
       console.error("Kayıt hatası:", error);
     }
   };
-  // -------------------------------------------
 
   const deleteQuestion = async (id) => {
-    if (!confirm("Bu kaydı silmek istediğine emin misin?")) return;
+    if (!confirm("Silinsin mi?")) return;
     await fetch(`http://localhost:5001/api/questions/${id}`, { method: 'DELETE' });
     fetchQuestions();
   };
@@ -91,24 +118,21 @@ export default function QuestionTracker({ currentUser }) {
   // --- ANALİZ KISMI ---
   const filteredQuestions = questions.filter(q => filterLesson === 'TÜM DERSLER' ? true : q.lesson === filterLesson);
   
-  // Aylık toplam hesaplama
   const currentMonth = new Date().getMonth();
   const monthlyQuestions = filteredQuestions.filter(q => {
-    // Tarih formatı hatasını önlemek için güvenli kontrol
-    if(!q.timestamp && !q.date) return false;
-    const dateObj = q.timestamp ? new Date(q.timestamp) : new Date(); // Timestamp yoksa şu anı al (fallback)
-    return dateObj.getMonth() === currentMonth;
+     // Basit ay kontrolü
+     const d = q.timestamp ? new Date(q.timestamp) : new Date();
+     return d.getMonth() === currentMonth;
   });
   
   const totalQuestions = monthlyQuestions.reduce((acc, curr) => acc + curr.count, 0);
 
-  // Grafik verisi hazırlama
   const chartDataRaw = {};
   monthlyQuestions.forEach(q => {
-    // Tarih formatı DD.MM.YYYY varsayılıyor
-    const dateParts = q.date ? q.date.split('.') : [];
-    const shortDate = dateParts.length >= 2 ? `${dateParts[0]}.${dateParts[1]}` : '??';
-    
+    // Grafik için tarih gruplama
+    const dateKey = q.date || new Date().toLocaleDateString('tr-TR');
+    const shortDate = dateKey.substring(0, 5); // Gün.Ay
+
     if (!chartDataRaw[shortDate]) chartDataRaw[shortDate] = { total: 0, details: [] };
     chartDataRaw[shortDate].total += q.count;
     chartDataRaw[shortDate].details.push({ lesson: q.lesson, topic: q.topic, count: q.count });
@@ -150,11 +174,10 @@ export default function QuestionTracker({ currentUser }) {
         <div style={cardStyle}>
           <h3 style={{ marginBottom: '15px', color: '#a78bfa', display:'flex', alignItems:'center', gap:'8px' }}>
              Yeni Kayıt 
-             <span style={{fontSize:'10px', background:'#334155', padding:'2px 6px', borderRadius:'4px', color:'#94a3b8'}}>Max 120/Gün</span>
+             <span style={{fontSize:'10px', background:'#ef4444', padding:'2px 6px', borderRadius:'4px', color:'white', fontWeight:'bold'}}>LİMİT: 120/Gün</span>
           </h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
             
-            {/* DERS SEÇİMİ */}
             <div style={{display:'flex', flexDirection:'column', gap:'5px'}}>
               <label style={{ fontSize: '12px', color: '#94a3b8' }}>Ders:</label>
               <select style={inputStyle} value={qLesson} onChange={handleLessonChange}>
@@ -162,7 +185,6 @@ export default function QuestionTracker({ currentUser }) {
               </select>
             </div>
 
-            {/* KONU SEÇİMİ */}
             <div style={{display:'flex', flexDirection:'column', gap:'5px'}}>
               <label style={{ fontSize: '12px', color: '#94a3b8' }}>Konu:</label>
               <select style={inputStyle} value={qTopic} onChange={e => setQTopic(e.target.value)}>
@@ -171,8 +193,8 @@ export default function QuestionTracker({ currentUser }) {
             </div>
             
             <div style={{display:'flex', flexDirection:'column', gap:'5px'}}>
-              <label style={{ fontSize: '12px', color: '#94a3b8' }}>Soru Sayısı:</label>
-              <input type="number" placeholder="Max: 120" style={inputStyle} value={qCount} onChange={e => setQCount(e.target.value)} />
+              <label style={{ fontSize: '12px', color: '#94a3b8' }}>Soru Sayısı (Max 120):</label>
+              <input type="number" placeholder="Örn: 50" style={inputStyle} value={qCount} onChange={e => setQCount(e.target.value)} />
             </div>
             <button style={buttonStyle} onClick={addQuestion}><PlusCircle size={16} style={{marginRight:'5px', display:'inline'}}/> KAYDET</button>
           </div>
@@ -190,7 +212,7 @@ export default function QuestionTracker({ currentUser }) {
           </div>
         </div>
 
-        {/* SAĞ: GRAFİK */}
+        {/* SAĞ: GRAFİK (Aynı) */}
         <div style={cardStyle}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap:'wrap', gap:'10px' }}>
             <div><h3 style={{ color: '#a78bfa', display:'flex', alignItems:'center', gap:'10px' }}><Layers size={18}/> Performans</h3></div>
