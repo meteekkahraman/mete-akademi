@@ -3,7 +3,6 @@ import React, { useState, useEffect } from 'react';
 import { Shield, Activity, User } from 'lucide-react';
 
 // Alt Bileşenler ('admin' klasöründen)
-// Eğer bu dosyaları 'admin' klasörüne taşımadıysan hata alırsın, dikkat et!
 import StatsCards from './admin/StatsCards';
 import AdminCharts from './admin/AdminCharts';
 import UserTable from './admin/UserTable';
@@ -24,11 +23,10 @@ export default function AdminPanel() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // 1. DÜZELTME: Linkleri 'localhost:5001' yaptık
-      const s = await fetch('http://localhost:5001/api/admin/stats').then(r=>r.json());
-      const u = await fetch('http://localhost:5001/api/admin/users').then(r=>r.json());
+      // DÜZELTME: Portu 5002 yaptık
+      const s = await fetch('http://localhost:5002/api/admin/stats').then(r=>r.json());
+      const u = await fetch('http://localhost:5002/api/admin/users').then(r=>r.json());
       
-      // 2. DÜZELTME: Veri boş gelirse çökmemesi için kontrol ekledik
       if (s && u) {
         setStats(s); 
         setUsers(u);
@@ -42,34 +40,33 @@ export default function AdminPanel() {
   const openUserDetail = async (user) => {
     setSelectedUser(user);
     try {
-      // Link Düzeltmesi
-      const res = await fetch(`http://localhost:5001/api/studylogs?username=${user.username}`);
+      // DÜZELTME: Portu 5002 yaptık
+      const res = await fetch(`http://localhost:5002/api/studylogs?username=${user.username}`);
       if(res.ok) setUserLogs(await res.json());
     } catch (e) {}
   };
 
   const toggleBan = async (userId) => {
     if(!confirm("Erişim durumu değişsin mi?")) return;
-    // Link Düzeltmesi
-    await fetch('http://localhost:5001/api/admin/toggle-ban', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({userId}) });
+    // DÜZELTME: Portu 5002 yaptık
+    await fetch('http://localhost:5002/api/admin/toggle-ban', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({userId}) });
     fetchData();
   };
 
   const toggleRole = async (userId) => {
     if(!confirm("Yönetici yetkisi değişsin mi?")) return;
-    // Link Düzeltmesi
-    const res = await fetch('http://localhost:5001/api/admin/toggle-role', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({userId}) });
+    // DÜZELTME: Portu 5002 yaptık
+    const res = await fetch('http://localhost:5002/api/admin/toggle-role', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({userId}) });
     const data = await res.json();
     if(!res.ok) alert(data.error); else fetchData();
   };
 
   if (loading) return <div style={{color:'white', padding:'50px', textAlign:'center'}}>Yükleniyor...</div>;
   
-  // Eğer sunucu kapalıysa veya veri gelmezse Beyaz Ekran yerine bu uyarıyı gösterecek
   if (!stats) return (
     <div style={{color:'#ef4444', padding:'50px', textAlign:'center', border:'1px dashed #ef4444', margin:'20px', borderRadius:'10px'}}>
       <h3>⚠️ Veri Alınamadı</h3>
-      <p>Lütfen 'server' klasöründe 'node server.js' komutunun çalıştığından emin ol.</p>
+      <p>Sunucun 5002 portunda çalışıyor ama bağlantı kurulamadı. Lütfen 'node server.js' ekranını kontrol et.</p>
     </div>
   );
 
@@ -87,7 +84,6 @@ export default function AdminPanel() {
       {/* İÇERİK ALANI */}
       {activeView === 'dashboard' && (
         <div style={{display:'flex', flexDirection:'column', gap:'20px'}}>
-           {/* stats verisi varsa göster */}
            {stats && <StatsCards stats={stats} />}
            {stats && <AdminCharts stats={stats} />}
         </div>
