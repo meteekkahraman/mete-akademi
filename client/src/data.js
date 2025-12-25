@@ -1,5 +1,9 @@
-// TÜM YKS MÜFREDATI (RESİMLERE GÖRE DÜZENLENDİ)
+// TÜM YKS MÜFREDATI (GÜNCELLENDİ - PARAGRAF EKLENDİ)
 export const curriculum = {
+  "PARAGRAF (RUTİN)": [
+    "Paragraf (Genel)", "Paragrafta Ana Düşünce", "Paragrafta Yardımcı Düşünce", 
+    "Paragrafta Yapı (Akışı Bozan vb.)", "Anlatım Teknikleri", "Paragraf Denemesi"
+  ],
   "TYT MATEMATİK": [
     "Temel Kavramlar", "Sayı Basamakları", "Bölme - Bölünebilme", "EBOB - EKOK", 
     "Rasyonel Sayılar", "Basit Eşitsizlikler", "Mutlak Değer", "Üslü Sayılar", 
