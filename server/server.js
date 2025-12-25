@@ -2,7 +2,6 @@ const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
 const helmet = require('helmet'); 
 require('dotenv').config();
 
@@ -29,17 +28,80 @@ const UserSchema = new mongoose.Schema({
 });
 const User = mongoose.model('User', UserSchema);
 
-const StudyLogSchema = new mongoose.Schema({ username: String, lesson: String, topic: String, type: String, duration: Number, date: String, timestamp: { type: Date, default: Date.now } });
-const StudyLog = mongoose.model('StudyLog', StudyLogSchema);
+// YENİ: Konu Çalışma Geçmişi (Tarihli Soru Takibi İçin)
+const TopicLogSchema = new mongoose.Schema({
+  username: String,
+  lesson: String,
+  topic: String,
+  count: Number,
+  date: String, // YYYY-MM-DD formatında tutacağız
+  timestamp: { type: Date, default: Date.now }
+});
+const TopicLog = mongoose.model('TopicLog', TopicLogSchema);
+
+// Konu İlerleme Durumu (Tik Kutusu)
+const ProgressSchema = new mongoose.Schema({ 
+  username: String, lesson: String, topic: String, isCompleted: { type: Boolean, default: false } 
+});
+const Progress = mongoose.model('Progress', ProgressSchema);
+
+// Diğer Modeller
+const StudyLog = mongoose.model('StudyLog', new mongoose.Schema({ username: String, lesson: String, topic: String, type: String, duration: Number, date: String, timestamp: { type: Date, default: Date.now } }));
 const Post = mongoose.model('Post', new mongoose.Schema({ username: String, content: String, date: { type: Date, default: Date.now }, isSystem: { type: Boolean, default: false } }));
-const Exam = mongoose.model('Exam', new mongoose.Schema({ username: String, lesson: String, net: Number, date: String }));
+const Exam = mongoose.model('Exam', new mongoose.Schema({ username: String, lesson: String, topic: String, net: Number, date: String })); // topic eklenebilir ama şimdilik standart
 const Program = mongoose.model('Program', new mongoose.Schema({ username: String, day: String, time: String, lesson: String, topic: String }));
 const Question = mongoose.model('Question', new mongoose.Schema({ username: String, lesson: String, topic: String, count: Number, date: String, timestamp: { type: Date, default: Date.now } }));
-const Progress = mongoose.model('Progress', new mongoose.Schema({ username: String, lesson: String, topic: String, isCompleted: Boolean }));
+
 
 // --- ROTALAR ---
 
-// 1. ADMIN PANELİ İSTATİSTİKLERİ
+// 1. YENİ GELİŞMİŞ KONU TAKİP SİSTEMİ
+// A. İlerlemeleri Getir
+app.get('/api/progress', async (req, res) => { 
+  res.json(await Progress.find({ username: req.query.username })); 
+});
+
+// B. Konuyu İşaretle (Tik At / Kaldır)
+app.post('/api/progress', async (req, res) => {
+    const { username, lesson, topic } = req.body;
+    const existing = await Progress.findOne({ username, lesson, topic });
+    
+    if (existing) {
+        // Varsa durumunu tersine çevir (Check <-> Uncheck)
+        existing.isCompleted = !existing.isCompleted;
+        await existing.save();
+        res.json({ status: existing.isCompleted ? 'completed' : 'removed' });
+    } else {
+        // Yoksa yeni oluştur ve tamamlandı yap
+        await new Progress({ username, lesson, topic, isCompleted: true }).save();
+        res.json({ status: 'completed' });
+    }
+});
+
+// C. Konu Geçmişi Ekle (Soru Sayısı & Tarih)
+app.post('/api/topic/log', async (req, res) => {
+  const { username, lesson, topic, count, date } = req.body;
+  await new TopicLog({ username, lesson, topic, count, date }).save();
+  
+  // Kullanıcıya XP verelim (Motivasyon)
+  const user = await User.findOne({ username });
+  if (user) {
+      user.xp += Math.floor(count * 0.5); // Her soru için 0.5 XP
+      await user.save();
+  }
+  res.json({ msg: "Log başarıyla eklendi" });
+});
+
+// D. Konu Geçmişini Getir (Rapor İçin)
+app.get('/api/topic/logs', async (req, res) => {
+  const { username, lesson, topic } = req.query;
+  // Tarihe göre yeniden eskiye sırala
+  const logs = await TopicLog.find({ username, lesson, topic }).sort({ date: -1 });
+  res.json(logs);
+});
+
+
+// 2. ADMIN İSTATİSTİKLERİ & YÖNETİM
 app.get('/api/admin/stats', async (req, res) => {
   try {
     const totalUsers = await User.countDocuments({ role: 'student' });
@@ -92,21 +154,18 @@ app.post('/api/admin/toggle-ban', async (req, res) => {
   res.json({msg:"Ok"});
 });
 
-// YENİ: YETKİ VERME / ALMA (ADMIN TOGGLE)
+// YETKİ VERME / ALMA
 app.post('/api/admin/toggle-role', async (req, res) => {
   const { userId } = req.body;
   const user = await User.findById(userId);
-  
-  // Güvenlik Kilidi: Ana yöneticiyi kimse düşüremez
   if (user.username === 'metosor') return res.status(400).json({ error: "Ana Yönetici (Metosor) yetkisi değiştirilemez!" });
-
-  // Rolü değiştir (Admin <-> Student)
   user.role = user.role === 'admin' ? 'student' : 'admin';
   await user.save();
   res.json({ msg: "Rol değiştirildi", newRole: user.role });
 });
 
-// 2. ODA SİSTEMİ
+
+// 3. ODA SİSTEMİ
 app.get('/api/rooms/active', async (req, res) => {
   const activeLimit = new Date(Date.now() - 1 * 60 * 60 * 1000); 
   res.json(await User.find({ "currentRoom.id": { $ne: 'offline' }, lastLogin: { $gte: activeLimit } }, 'username currentRoom title xp'));
@@ -121,7 +180,8 @@ app.post('/api/rooms/leave', async (req, res) => {
   res.json({msg:"Çıkış yapıldı"});
 });
 
-// 3. AUTH
+
+// 4. AUTH
 app.post('/api/register', async (req, res) => {
   const { username, firstName, lastName, email, password } = req.body;
   const hashedPassword = await bcrypt.hash(password, 10);
@@ -140,7 +200,8 @@ app.post('/api/login', async (req, res) => {
   } else res.status(401).json({ error: "Hata" });
 });
 
-// 4. DİĞER FONKSİYONLAR
+
+// 5. DİĞER FONKSİYONLAR
 app.get('/api/studylogs', async (req, res) => { res.json(await StudyLog.find({ username: req.query.username }).sort({ timestamp: -1 })); });
 app.post('/api/studylogs', async (req, res) => {
   const { username, duration, lesson } = req.body;
@@ -177,10 +238,8 @@ app.post('/api/program', async (req, res) => { await new Program(req.body).save(
 app.delete('/api/program/:id', async (req, res) => { await Program.findByIdAndDelete(req.params.id); res.json({msg:"Ok"}); });
 app.get('/api/questions', async (req, res) => { res.json(await Question.find({ username: req.query.username }).sort({ timestamp: -1 })); });
 app.post('/api/questions', async (req, res) => { await new Question(req.body).save(); res.json({msg:"Ok"}); });
-app.get('/api/progress', async (req, res) => { res.json(await Progress.find({ username: req.query.username })); });
-app.post('/api/progress', async (req, res) => { const { username, lesson, topic } = req.body; const existing = await Progress.findOne({ username, lesson, topic }); if (existing) { await Progress.deleteOne({ _id: existing._id }); res.json({ status: 'removed' }); } else { await new Progress({ ...req.body, isCompleted: true }).save(); res.json({ status: 'added' }); } });
 app.get('/api/posts', async (req, res) => { res.json(await Post.find().sort({ date: -1 }).limit(20)); });
 app.get('/api/friends', async (req, res) => { const user = await User.findOne({username: req.query.username}); res.json(user ? user.friends : []); });
 app.post('/api/friends/add', async (req, res) => { const { currentUser, friendEmail } = req.body; const friend = await User.findOne({email: friendEmail}); const me = await User.findOne({username: currentUser}); if(!friend) return res.status(404).json({error:"Bulunamadı"}); if(me.friends.includes(friend.username)) return res.status(400).json({error:"Zaten ekli"}); me.friends.push(friend.username); await me.save(); res.json({msg: "Eklendi"}); });
 
-app.listen(5002, () => console.log("✅ Sunucu 5002 portunda (YETKİ SİSTEMİ) çalışıyor"));
+app.listen(5002, () => console.log("✅ Sunucu 5002 portunda (PRO KONU TAKİBİ) çalışıyor"));
