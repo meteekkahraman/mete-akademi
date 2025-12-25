@@ -18,10 +18,14 @@ export default function Auth({ onLoginSuccess }) {
 
     try {
       const bodyData = endpoint === 'register' ? { username, firstName, lastName, email, password } : { email, password };
+      
+      // Render adresine istek atıyoruz
       const res = await fetch(`https://mete-akademi.onrender.com/api/${endpoint}`, { 
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(bodyData) 
       });
+      
       const data = await res.json();
+      
       if (res.ok) {
         if (endpoint === 'register') { 
           alert("✅ Kayıt Başarılı! Giriş yapabilirsin."); 
@@ -31,7 +35,11 @@ export default function Auth({ onLoginSuccess }) {
           onLoginSuccess(data.username, data.role);
         }
       } else { alert("❌ Hata: " + (data.error || "Bilinmeyen hata")); }
-    } catch (err) { alert("⚠️ Sunucuya bağlanılamadı! (Port 5002)"); }
+    } catch (err) { 
+      // HATA MESAJI DÜZELTİLDİ: Artık Port 5002 yazmayacak
+      console.error(err);
+      alert("⚠️ Sunucuya bağlanılamadı! İnternet bağlantını kontrol et."); 
+    }
   };
 
   const containerStyle = { width: '100%', height:'100vh', display:'flex', justifyContent:'center', alignItems:'center' };
