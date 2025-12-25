@@ -27,6 +27,16 @@ const UserSchema = new mongoose.Schema({
   lastLogin: { type: Date, default: Date.now }
 });
 const User = mongoose.model('User', UserSchema);
+// 7. YENİ: KONU ISI HARİTASI MODELİ (0: Kırmızı, 1: Sarı, 2: Yeşil)
+const TopicStatusSchema = new mongoose.Schema({
+  username: String, 
+  lesson: String, 
+  topic: String, 
+  status: { type: Number, default: 0 } 
+});
+// Her kullanıcı+ders+konu kombinasyonu benzersiz olmalı ki üstüne yazsın
+TopicStatusSchema.index({ username: 1, lesson: 1, topic: 1 }, { unique: true });
+const TopicStatus = mongoose.model('TopicStatus', TopicStatusSchema);
 
 // Konu Çalışma Geçmişi
 const TopicLogSchema = new mongoose.Schema({
@@ -264,6 +274,33 @@ app.get('/api/posts', async (req, res) => { res.json(await Post.find().sort({ da
 
 app.get('/api/friends', async (req, res) => { const user = await User.findOne({username: req.query.username}); res.json(user ? user.friends : []); });
 app.post('/api/friends/add', async (req, res) => { const { currentUser, friendEmail } = req.body; const friend = await User.findOne({email: friendEmail}); const me = await User.findOne({username: currentUser}); if(!friend) return res.status(404).json({error:"Bulunamadı"}); if(me.friends.includes(friend.username)) return res.status(400).json({error:"Zaten ekli"}); me.friends.push(friend.username); await me.save(); res.json({msg: "Eklendi"}); });
+
+// --- 7. ISI HARİTASI API ---
+// Kullanıcının tüm harita verisini çek
+app.get('/api/heatmap', async (req, res) => {
+  try {
+    const { username } = req.query;
+    const data = await TopicStatus.find({ username });
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: "Veri çekilemedi" });
+  }
+});
+
+// Konu durumunu güncelle (Varsa değiştirir, yoksa yeni oluşturur)
+app.post('/api/heatmap', async (req, res) => {
+  try {
+    const { username, lesson, topic, status } = req.body;
+    await TopicStatus.findOneAndUpdate(
+      { username, lesson, topic }, // Kimi arıyoruz?
+      { status },                  // Neyi güncelliyoruz?
+      { upsert: true, new: true }  // Yoksa oluştur (upsert)
+    );
+    res.json({ msg: "Kaydedildi" });
+  } catch (error) {
+    res.status(500).json({ error: "Kaydedilemedi" });
+  }
+});
 
 // SERVER BAŞLATMA
 const PORT = process.env.PORT || 5001;

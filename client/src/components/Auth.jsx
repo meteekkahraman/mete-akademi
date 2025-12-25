@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 
 export default function Auth({ onLoginSuccess }) {
   const [isLogin, setIsLogin] = useState(true);
+  const [isLoading, setIsLoading] = useState(false); // YENİ: Yüklenme durumu
   
   // FORM DATALARI
   const [username, setUsername] = useState('');
@@ -11,10 +12,14 @@ export default function Auth({ onLoginSuccess }) {
   const [password, setPassword] = useState('');
 
   const handleAuth = async (endpoint) => {
+    // Validasyonlar
     if (!email || !password) return alert("E-posta ve şifre zorunlu!");
     if (endpoint === 'register') {
       if(!username || !firstName || !lastName) return alert("Tüm alanları doldurun!");
     }
+
+    // Yüklenme başladı (Butonu kilitle ve döndür)
+    setIsLoading(true);
 
     try {
       const bodyData = endpoint === 'register' ? { username, firstName, lastName, email, password } : { email, password };
@@ -34,18 +39,38 @@ export default function Auth({ onLoginSuccess }) {
           // Başarılı girişi App.jsx'e bildir
           onLoginSuccess(data.username, data.role);
         }
-      } else { alert("❌ Hata: " + (data.error || "Bilinmeyen hata")); }
+      } else { 
+        alert("❌ Hata: " + (data.error || "Bilinmeyen hata")); 
+      }
     } catch (err) { 
-      // HATA MESAJI DÜZELTİLDİ: Artık Port 5002 yazmayacak
       console.error(err);
       alert("⚠️ Sunucuya bağlanılamadı! İnternet bağlantını kontrol et."); 
+    } finally {
+      // İşlem bitti (Başarılı olsa da olmasa da dönmeyi durdur)
+      setIsLoading(false);
     }
   };
 
   const containerStyle = { width: '100%', height:'100vh', display:'flex', justifyContent:'center', alignItems:'center' };
   const formStyle = { backgroundColor: '#1e293b', padding: '40px', borderRadius: '20px', width: '350px', textAlign: 'center', border: '1px solid #334155' };
   const inputStyle = { padding: '12px', borderRadius: '8px', border: '1px solid #475569', backgroundColor: '#0f172a', color: 'white', outline: 'none', width: '100%', marginBottom:'15px' };
-  const buttonStyle = { padding: '12px', borderRadius: '8px', border: 'none', backgroundColor: '#3b82f6', color: 'white', fontWeight: 'bold', cursor: 'pointer', width: '100%' };
+  
+  // GÜNCELLENEN BUTON STİLİ (Flexbox ve Disabled durumu için)
+  const buttonStyle = { 
+    padding: '0', // Padding'i sıfırladık, yükseklik ile ayarlayacağız
+    height: '45px', // Sabit yükseklik (Dönerken buton boyu değişmesin)
+    borderRadius: '8px', 
+    border: 'none', 
+    backgroundColor: isLoading ? '#6366f1' : '#3b82f6', // Yüklenirken rengi biraz soldur
+    color: 'white', 
+    fontWeight: 'bold', 
+    cursor: isLoading ? 'not-allowed' : 'pointer', // Yüklenirken tıklanamaz imleci
+    width: '100%',
+    display: 'flex',          // İçeriği ortalamak için
+    justifyContent: 'center', // Yatay ortalama
+    alignItems: 'center',     // Dikey ortalama
+    opacity: isLoading ? 0.8 : 1 // Yüklenirken hafif şeffaf
+  };
 
   return (
     <div style={containerStyle}>
@@ -54,18 +79,24 @@ export default function Auth({ onLoginSuccess }) {
         
         {!isLogin && (
           <>
-            <input type="text" placeholder="Adın" style={inputStyle} onChange={e => setFirstName(e.target.value)} />
-            <input type="text" placeholder="Soyadın" style={inputStyle} onChange={e => setLastName(e.target.value)} />
-            <input type="text" placeholder="Kullanıcı Adı" style={inputStyle} onChange={e => setUsername(e.target.value)} />
+            <input type="text" placeholder="Adın" style={inputStyle} onChange={e => setFirstName(e.target.value)} disabled={isLoading} />
+            <input type="text" placeholder="Soyadın" style={inputStyle} onChange={e => setLastName(e.target.value)} disabled={isLoading} />
+            <input type="text" placeholder="Kullanıcı Adı" style={inputStyle} onChange={e => setUsername(e.target.value)} disabled={isLoading} />
           </>
         )}
 
-        <input type="email" placeholder="E-posta" style={inputStyle} onChange={e => setEmail(e.target.value)} />
-        <input type="password" placeholder="Şifre" style={inputStyle} onChange={e => setPassword(e.target.value)} />
+        <input type="email" placeholder="E-posta" style={inputStyle} onChange={e => setEmail(e.target.value)} disabled={isLoading} />
+        <input type="password" placeholder="Şifre" style={inputStyle} onChange={e => setPassword(e.target.value)} disabled={isLoading} />
         
-        <button style={buttonStyle} onClick={() => handleAuth(isLogin ? 'login' : 'register')}>{isLogin ? 'GİRİŞ YAP' : 'KAYIT OL'}</button>
+        <button 
+          style={buttonStyle} 
+          onClick={() => handleAuth(isLogin ? 'login' : 'register')}
+          disabled={isLoading} // Yüklenirken tıklamayı engelle
+        >
+          {isLoading ? <div className="loading-spinner"></div> : (isLogin ? 'GİRİŞ YAP' : 'KAYIT OL')}
+        </button>
         
-        <p onClick={() => setIsLogin(!isLogin)} style={{ color: '#94a3b8', marginTop: '20px', cursor: 'pointer' }}>
+        <p onClick={() => !isLoading && setIsLogin(!isLogin)} style={{ color: '#94a3b8', marginTop: '20px', cursor: isLoading ? 'default' : 'pointer' }}>
           {isLogin ? 'Hesabın yok mu? Kayıt Ol' : 'Zaten hesabın var mı? Giriş Yap'}
         </p>
       </div>
