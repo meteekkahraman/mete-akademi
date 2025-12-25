@@ -2,7 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { Shield, Activity, User } from 'lucide-react';
 
-// Alt Bileşenler (Yeni oluşturduğumuz 'admin' klasöründen)
+// Alt Bileşenler ('admin' klasöründen)
+// Eğer bu dosyaları 'admin' klasörüne taşımadıysan hata alırsın, dikkat et!
 import StatsCards from './admin/StatsCards';
 import AdminCharts from './admin/AdminCharts';
 import UserTable from './admin/UserTable';
@@ -23,36 +24,54 @@ export default function AdminPanel() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const s = await fetch('https://mete-akademi.onrender.com/api/admin/stats').then(r=>r.json());
-      const u = await fetch('https://mete-akademi.onrender.com/api/admin/users').then(r=>r.json());
-      setStats(s); setUsers(u);
-    } catch(e) { console.error(e); }
+      // 1. DÜZELTME: Linkleri 'localhost:5001' yaptık
+      const s = await fetch('http://localhost:5001/api/admin/stats').then(r=>r.json());
+      const u = await fetch('http://localhost:5001/api/admin/users').then(r=>r.json());
+      
+      // 2. DÜZELTME: Veri boş gelirse çökmemesi için kontrol ekledik
+      if (s && u) {
+        setStats(s); 
+        setUsers(u);
+      }
+    } catch(e) { 
+      console.error("Admin veri hatası:", e); 
+    }
     setLoading(false);
   };
 
   const openUserDetail = async (user) => {
     setSelectedUser(user);
     try {
-      const res = await fetch(`https://mete-akademi.onrender.com/api/studylogs?username=${user.username}`);
+      // Link Düzeltmesi
+      const res = await fetch(`http://localhost:5001/api/studylogs?username=${user.username}`);
       if(res.ok) setUserLogs(await res.json());
     } catch (e) {}
   };
 
   const toggleBan = async (userId) => {
     if(!confirm("Erişim durumu değişsin mi?")) return;
-    await fetch('https://mete-akademi.onrender.com/api/admin/toggle-ban', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({userId}) });
+    // Link Düzeltmesi
+    await fetch('http://localhost:5001/api/admin/toggle-ban', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({userId}) });
     fetchData();
   };
 
   const toggleRole = async (userId) => {
     if(!confirm("Yönetici yetkisi değişsin mi?")) return;
-    const res = await fetch('https://mete-akademi.onrender.com/api/admin/toggle-role', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({userId}) });
+    // Link Düzeltmesi
+    const res = await fetch('http://localhost:5001/api/admin/toggle-role', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({userId}) });
     const data = await res.json();
     if(!res.ok) alert(data.error); else fetchData();
   };
 
   if (loading) return <div style={{color:'white', padding:'50px', textAlign:'center'}}>Yükleniyor...</div>;
-  if (!stats) return <div style={{color:'#ef4444', padding:'50px', textAlign:'center'}}>Veri alınamadı.</div>;
+  
+  // Eğer sunucu kapalıysa veya veri gelmezse Beyaz Ekran yerine bu uyarıyı gösterecek
+  if (!stats) return (
+    <div style={{color:'#ef4444', padding:'50px', textAlign:'center', border:'1px dashed #ef4444', margin:'20px', borderRadius:'10px'}}>
+      <h3>⚠️ Veri Alınamadı</h3>
+      <p>Lütfen 'server' klasöründe 'node server.js' komutunun çalıştığından emin ol.</p>
+    </div>
+  );
 
   return (
     <div style={{width:'100%', color:'white'}}>
@@ -68,8 +87,9 @@ export default function AdminPanel() {
       {/* İÇERİK ALANI */}
       {activeView === 'dashboard' && (
         <div style={{display:'flex', flexDirection:'column', gap:'20px'}}>
-           <StatsCards stats={stats} />
-           <AdminCharts stats={stats} />
+           {/* stats verisi varsa göster */}
+           {stats && <StatsCards stats={stats} />}
+           {stats && <AdminCharts stats={stats} />}
         </div>
       )}
 
