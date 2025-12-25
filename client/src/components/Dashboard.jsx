@@ -91,7 +91,7 @@ export default function Dashboard({ currentUser, userRole, onLogout }) {
     doc.setTextColor(255, 255, 255);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(24);
-    doc.text("KAHRAMAN AKADEMI", 14, 32);
+    doc.text("METE KAHRAMAN AKADEMI", 14, 32);
 
     // Sağ taraf: Öğrenci Bilgisi
     doc.setFontSize(10);
@@ -178,7 +178,7 @@ export default function Dashboard({ currentUser, userRole, onLogout }) {
       <div style={headerStyle}>
         <div style={headerInnerStyle}>
           <div>
-             <h1 style={{ fontSize:'1.5rem', fontWeight:'bold', margin:0, background: 'linear-gradient(to right, #60a5fa, #a78bfa)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>METOSOR AKADEMİ</h1>
+             <h1 style={{ fontSize:'1.5rem', fontWeight:'bold', margin:0, background: 'linear-gradient(to right, #60a5fa, #a78bfa)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>METE KAHRAMAN AKADEMI</h1>
              <div style={{ fontSize:'12px', color:'#94a3b8', display:'flex', gap:'10px', marginTop:'2px' }}><span><Award size={12}/> {title}</span> <span><Zap size={12}/> {xp} XP</span></div>
           </div>
           
