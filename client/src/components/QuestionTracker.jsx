@@ -19,7 +19,7 @@ export default function QuestionTracker({ currentUser }) {
 
   const fetchQuestions = async () => {
     try {
-      const res = await fetch(`http://localhost:5001/api/questions?username=${currentUser}`);
+      const res = await fetch(`https://mete-akademi.onrender.com/api/questions?username=${currentUser}`);
       if (res.ok) {
         setQuestions(await res.json());
       }
@@ -86,7 +86,7 @@ export default function QuestionTracker({ currentUser }) {
 
     // 3. KAYDETME İŞLEMİ
     try {
-      const res = await fetch('http://localhost:5001/api/questions', {
+      const res = await fetch('https://mete-akademi.onrender.com/api/questions', {
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -111,7 +111,7 @@ export default function QuestionTracker({ currentUser }) {
 
   const deleteQuestion = async (id) => {
     if (!confirm("Silinsin mi?")) return;
-    await fetch(`http://localhost:5001/api/questions/${id}`, { method: 'DELETE' });
+    await fetch(`https://mete-akademi.onrender.com/api/questions/${id}`, { method: 'DELETE' });
     fetchQuestions();
   };
 

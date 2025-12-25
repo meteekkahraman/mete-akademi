@@ -43,23 +43,17 @@ export default function Dashboard({ currentUser, userRole, onLogout }) {
   const fetchProgram = async () => { const res = await fetch(`https://mete-akademi.onrender.com/api/program?username=${currentUser}`); setPrograms(await res.json()); };
   const fetchLogs = async () => { try { const res = await fetch(`https://mete-akademi.onrender.com/api/studylogs?username=${currentUser}`); setStudyLogs(await res.json()); } catch(e) { setStudyLogs([]); } };
 
-  // --- GÜVENLİ ÇIKIŞ FONKSİYONU (YENİ EKLENDİ) ---
+  // --- GÜVENLİ ÇIKIŞ ---
   const handleSafeLogout = async () => {
-    // 1. Sunucuya "Ben odadan çıkıyorum" de
     try {
       await fetch('https://mete-akademi.onrender.com/api/rooms/leave', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: currentUser })
       });
-    } catch (e) { 
-      console.error("Çıkış hatası:", e); 
-    }
-
-    // 2. Uygulamadan çıkış yap
+    } catch (e) { console.error("Çıkış hatası:", e); }
     onLogout();
   };
-  // -----------------------------------------------
 
   useEffect(() => {
     let interval = null;
@@ -84,14 +78,97 @@ export default function Dashboard({ currentUser, userRole, onLogout }) {
   const addExam = async () => { await fetch('https://mete-akademi.onrender.com/api/exams', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({username:currentUser, lesson, net, date: new Date().toLocaleDateString()}) }); setNet(''); fetchExams(); };
   const deleteItem = async (type, id) => { if(!confirm('Silinsin mi?')) return; await fetch(`https://mete-akademi.onrender.com/api/${type}/${id}`, { method: 'DELETE' }); if(type==='exams') fetchExams(); else fetchProgram(); };
   const addProgram = async () => { if (!startTime || !endTime) return alert("Saat girin!"); await fetch('https://mete-akademi.onrender.com/api/program', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({username:currentUser, day:progDay, time:`${startTime} - ${endTime}`, lesson:progLesson, topic:progTopic}) }); fetchProgram(); };
-  const downloadPDF = () => { const doc = new jsPDF(); doc.text(`METOSOR AKADEMI - ${currentUser}`, 14, 20); const tableData = programs.map(p => [p.day, p.time, p.lesson, p.topic]); autoTable(doc, { startY: 30, head: [['GÜN', 'SAAT', 'DERS', 'KONU']], body: tableData }); doc.save('program.pdf'); };
 
-  // CSS STYLES (DÜZENLENDİ - TAŞMALAR ENGELLENDİ)
-  const containerStyle = { width: '100%', minHeight:'100vh', background:'#0f172a', color:'white', overflowX: 'hidden' }; // Yatay taşmayı gizle
+  // --- PROFESYONEL PDF İNDİRME FONKSİYONU ---
+  const downloadPDF = () => {
+    const doc = new jsPDF();
+    
+    // 1. ÜST BAŞLIK TASARIMI (Lacivert Alan)
+    doc.setFillColor(30, 41, 59); // Koyu Lacivert (Slate-800)
+    doc.rect(0, 0, 210, 50, 'F'); // Sayfa genişliğince dikdörtgen
+
+    // Sol taraf: Başlık
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(24);
+    doc.text("KAHRAMAN AKADEMI", 14, 32);
+
+    // Sağ taraf: Öğrenci Bilgisi
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text(`OGRENCI: ${currentUser.toUpperCase()}`, 195, 28, { align: 'right' });
+    doc.text(`TARIH: ${new Date().toLocaleDateString()}`, 195, 36, { align: 'right' });
+
+    // 2. TABLO VERİSİNİ HAZIRLA
+    // Günleri sıraya diziyoruz
+    const daysOrder = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
+    let tableBody = [];
+
+    daysOrder.forEach(day => {
+      // O güne ait dersleri bul ve saate göre sırala
+      const dayItems = programs
+        .filter(p => p.day === day)
+        .sort((a, b) => a.time.localeCompare(b.time));
+
+      if (dayItems.length > 0) {
+        // GÜN BAŞLIĞI (Tablo içinde ara başlık satırı)
+        tableBody.push([{ 
+          content: day.toUpperCase(), 
+          colSpan: 3, 
+          styles: { fillColor: [241, 245, 249], textColor: [71, 85, 105], fontStyle: 'bold', halign: 'center' } 
+        }]);
+
+        // DERS SATIRLARI
+        dayItems.forEach(item => {
+          tableBody.push([
+            item.time,
+            item.lesson,
+            item.topic
+          ]);
+        });
+      }
+    });
+
+    // 3. TABLOYU ÇİZ
+    autoTable(doc, {
+      startY: 60,
+      head: [['SAAT', 'DERS', 'KONU']],
+      body: tableBody,
+      theme: 'grid',
+      headStyles: {
+        fillColor: [59, 130, 246], // Parlak Mavi Başlık
+        textColor: 255,
+        fontSize: 12,
+        fontStyle: 'bold',
+        halign: 'center'
+      },
+      styles: {
+        fontSize: 10,
+        cellPadding: 6,
+        lineColor: [226, 232, 240], // Açık gri çizgiler
+        lineWidth: 0.1,
+        textColor: [51, 65, 85]
+      },
+      columnStyles: {
+        0: { cellWidth: 40, halign: 'center', fontStyle:'bold' }, // Saat sütunu
+        1: { cellWidth: 60, fontStyle:'bold' }, // Ders sütunu
+        // Konu sütunu kalan alanı kaplar
+      },
+      alternateRowStyles: {
+        fillColor: [255, 255, 255]
+      }
+    });
+
+    doc.save(`kahraman_akademi_program_${currentUser}.pdf`);
+  };
+  // ----------------------------------------------------
+
+  // CSS STYLES
+  const containerStyle = { width: '100%', minHeight:'100vh', background:'#0f172a', color:'white', overflowX: 'hidden' };
   const headerStyle = { width:'100%', borderBottom:'1px solid #334155', display:'flex', justifyContent:'center', background:'#1e293b', padding:'0 20px', boxSizing: 'border-box' };
   const headerInnerStyle = { width:'100%', maxWidth:'1200px', padding:'15px 0', display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap: 'wrap', gap: '15px' };
   const contentContainerStyle = { width:'100%', maxWidth:'1200px', margin:'0 auto', padding:'20px', boxSizing: 'border-box' };
-  const cardStyle = { background:'#1e293b', padding:'20px', borderRadius:'15px', border:'1px solid #334155', boxShadow:'0 4px 6px rgba(0,0,0,0.1)', height: '100%', boxSizing: 'border-box' }; // Yükseklik ve box-sizing eklendi
+  const cardStyle = { background:'#1e293b', padding:'20px', borderRadius:'15px', border:'1px solid #334155', boxShadow:'0 4px 6px rgba(0,0,0,0.1)', height: '100%', boxSizing: 'border-box' };
   const inputStyle = { padding:'10px', borderRadius:'8px', background:'#0f172a', border:'1px solid #475569', color:'white', width:'100%', boxSizing: 'border-box', marginBottom:'10px' };
   const btnStyle = { width:'100%', padding:'12px', borderRadius:'8px', background:'#3b82f6', border:'none', color:'white', fontWeight:'bold', cursor:'pointer', transition:'0.2s' };
   const tabStyle = (active) => ({ padding: '8px 12px', borderRadius: '8px', border: 'none', color: active ? 'white' : '#94a3b8', background: active ? '#3b82f6' : 'transparent', cursor: 'pointer', display:'flex', alignItems:'center', gap:'5px', fontSize:'14px', transition:'0.2s', whiteSpace: 'nowrap' });
@@ -105,7 +182,6 @@ export default function Dashboard({ currentUser, userRole, onLogout }) {
              <div style={{ fontSize:'12px', color:'#94a3b8', display:'flex', gap:'10px', marginTop:'2px' }}><span><Award size={12}/> {title}</span> <span><Zap size={12}/> {xp} XP</span></div>
           </div>
           
-          {/* MOBİL UYUMLU MENÜ (Sığmazsa kaydırılabilir) */}
           <div style={{ display:'flex', gap:'5px', overflowX: 'auto', paddingBottom:'5px', maxWidth: '100%', scrollbarWidth: 'none' }}>
             <button onClick={()=>setActiveTab('dashboard')} style={tabStyle(activeTab==='dashboard')}><LayoutDashboard size={18}/> Panel</button>
             <button onClick={()=>setActiveTab('subject')} style={tabStyle(activeTab==='subject')}><PieChart size={18}/> Konular</button>
@@ -114,8 +190,6 @@ export default function Dashboard({ currentUser, userRole, onLogout }) {
             <button onClick={()=>setActiveTab('medya')} style={tabStyle(activeTab==='medya')}><Globe size={18}/> Medya</button>
             <button onClick={()=>setActiveTab('history')} style={tabStyle(activeTab==='history')}><HistoryIcon size={18}/> Geçmiş</button>
             {userRole === 'admin' && <button onClick={()=>setActiveTab('admin')} style={tabStyle(activeTab==='admin')}><Shield size={18}/> Yönetim</button>}
-            
-            {/* ÇIKIŞ BUTONU GÜNCELLENDİ: Artık handleSafeLogout çağırıyor */}
             <button onClick={handleSafeLogout} style={{...tabStyle(false), background:'#ef4444', color:'white', marginLeft:'auto'}}><LogOut size={18}/></button>
           </div>
         </div>
@@ -124,15 +198,15 @@ export default function Dashboard({ currentUser, userRole, onLogout }) {
       <div style={contentContainerStyle}>
         {activeTab === 'dashboard' && (
           <div style={{ display:'flex', flexDirection:'column', gap:'30px' }}>
-            {/* ÜST KISIM: GRAFİK VE NET EKLEME (Responsive Grid) */}
+            {/* ÜST KISIM */}
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(300px, 1fr))', gap:'20px', alignItems: 'start' }}>
-              <div style={{...cardStyle, height: '400px'}}> {/* Sabit yükseklik verildi */}
+              <div style={{...cardStyle, height: '400px'}}> 
                 <h3 style={{marginBottom:'15px', color:'#60a5fa', display:'flex', alignItems:'center', gap:'10px'}}><TrendingUp size={20}/> Net Gelişimi</h3>
-                <div style={{width: '100%', height: 'calc(100% - 40px)'}}> {/* Kalan yüksekliği kapla */}
+                <div style={{width: '100%', height: 'calc(100% - 40px)'}}> 
                    <ResponsiveContainer width="100%" height="100%"><LineChart data={exams.map((e,i)=>({n:i+1, net:e.net}))}><CartesianGrid stroke="#334155" strokeDasharray="3 3"/><XAxis dataKey="n" stroke="#94a3b8"/><YAxis stroke="#94a3b8"/><Tooltip contentStyle={{background:'#1e293b', border:'1px solid #334155', borderRadius:'8px'}}/><Line type="monotone" dataKey="net" stroke="#3b82f6" strokeWidth={3} dot={{r:4}}/></LineChart></ResponsiveContainer>
                 </div>
               </div>
-              <div style={{...cardStyle, height: 'auto'}}> {/* Yükseklik içeriğe göre */}
+              <div style={{...cardStyle, height: 'auto'}}> 
                 <h3 style={{marginBottom:'15px', color:'#4ade80', display:'flex', alignItems:'center', gap:'10px'}}>➕ Net Ekle</h3>
                 <div style={{display:'flex', flexDirection:'column', gap:'10px'}}>
                   <select style={inputStyle} value={lesson} onChange={e=>setLesson(e.target.value)}>{lessonsList.map(l=><option key={l}>{l}</option>)}</select>
@@ -152,7 +226,6 @@ export default function Dashboard({ currentUser, userRole, onLogout }) {
                 <button onClick={downloadPDF} style={{padding:'8px 15px', borderRadius:'8px', background:'#6366f1', border:'none', color:'white', cursor:'pointer', display:'flex', gap:'5px', alignItems:'center'}}><Download size={16}/> PDF İndir</button>
               </div>
               
-              {/* Program Ekleme Formu (Responsive) */}
               <div style={{display:'flex', gap:'10px', flexWrap:'wrap', marginBottom:'20px', background:'#0f172a', padding:'15px', borderRadius:'10px', border:'1px solid #334155', alignItems:'flex-end'}}>
                  <div style={{flex:'1 1 120px'}}><label style={{fontSize:'12px', color:'#94a3b8', display:'block', marginBottom:'5px'}}>Gün</label><select style={inputStyle} value={progDay} onChange={e=>setProgDay(e.target.value)}>{days.map(d=><option key={d}>{d}</option>)}</select></div>
                  <div style={{flex:'1 1 180px'}}><label style={{fontSize:'12px', color:'#94a3b8', display:'block', marginBottom:'5px'}}>Saat Aralığı</label><div style={{display:'flex', gap:'5px'}}><input type="time" style={inputStyle} value={startTime} onChange={e=>setStartTime(e.target.value)}/><input type="time" style={inputStyle} value={endTime} onChange={e=>setEndTime(e.target.value)}/></div></div>
@@ -161,7 +234,6 @@ export default function Dashboard({ currentUser, userRole, onLogout }) {
                  <div style={{flex:'1 1 100px'}}><button style={{...btnStyle, height:'42px'}} onClick={addProgram}>EKLE</button></div>
               </div>
 
-              {/* Program Kartları (Grid) */}
               <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(250px, 1fr))', gap:'15px'}}>
                 {days.map(day=>(
                   <div key={day} style={{background: day===currentDayName?'#1e3a8a':'#0f172a', padding:'15px', borderRadius:'10px', border:'1px solid #334155'}}>
@@ -182,7 +254,6 @@ export default function Dashboard({ currentUser, userRole, onLogout }) {
           </div>
         )}
 
-        {/* DİĞER SEKME İÇERİKLERİ (Aynı kalıyor) */}
         {activeTab === 'subject' && <SubjectTracker currentUser={currentUser} />}
         {activeTab === 'questions' && <QuestionTracker currentUser={currentUser} />}
         {activeTab === 'pomodoro' && <Pomodoro currentUser={currentUser} pomoActive={pomoActive} setPomoActive={setPomoActive} pomoTime={pomoTime} setPomoTime={setPomoTime} pomoMode={pomoMode} setPomoMode={setPomoMode} pomoLesson={pomoLesson} setPomoLesson={setPomoLesson} allLessons={lessonsList}/>}
