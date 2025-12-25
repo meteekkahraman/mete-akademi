@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { PlusCircle, Target, Trash2, Filter, Layers } from 'lucide-react';
-import { curriculum, lessonsList } from '../data'; // <-- YENİ VERİ
+import { curriculum, lessonsList } from '../data'; 
 
 export default function QuestionTracker({ currentUser }) {
   const [qLesson, setQLesson] = useState(lessonsList[0]);
-  const [qTopic, setQTopic] = useState(curriculum[lessonsList[0]][0]); // İlk dersin ilk konusunu seç
+  const [qTopic, setQTopic] = useState(curriculum[lessonsList[0]][0]); 
   const [qCount, setQCount] = useState('');
   const [filterLesson, setFilterLesson] = useState('TÜM DERSLER');
   const [questions, setQuestions] = useState([]);
@@ -14,7 +14,7 @@ export default function QuestionTracker({ currentUser }) {
   const handleLessonChange = (e) => {
     const selectedLesson = e.target.value;
     setQLesson(selectedLesson);
-    setQTopic(curriculum[selectedLesson][0]); // O dersin ilk konusuna geç
+    setQTopic(curriculum[selectedLesson][0]); 
   };
 
   const fetchQuestions = async () => {
@@ -24,14 +24,38 @@ export default function QuestionTracker({ currentUser }) {
 
   useEffect(() => { fetchQuestions(); }, [currentUser]);
 
+  // --- SORU EKLEME FONKSİYONU (DÜZENLENDİ) ---
   const addQuestion = async () => {
-    if (!qCount || qCount <= 0) return alert("Soru sayısı girin!");
+    const countVal = parseInt(qCount);
+
+    // 1. Temel Giriş Kontrolü
+    if (!qCount || countVal <= 0) return alert("Lütfen geçerli bir soru sayısı girin!");
+
+    // 2. LİMİT KONTROLÜ (Mantık: Bu konu için toplam 120 soru sınırı)
+    // Önce bu ders ve bu konu için veritabanında kayıtlı olan toplam soru sayısını buluyoruz.
+    const existingTotal = questions
+      .filter(q => q.lesson === qLesson && q.topic === qTopic)
+      .reduce((acc, curr) => acc + curr.count, 0);
+
+    // Eğer (Mevcut Toplam + Yeni Girilen) > 120 ise işlemi durdur.
+    if (existingTotal + countVal > 120) {
+      const remaining = 120 - existingTotal;
+      alert(`UYARI: "${qTopic}" konusu için maksimum 120 soru limiti vardır.\n\nŞu anki toplam: ${existingTotal}\nEkleyebileceğiniz maksimum miktar: ${remaining > 0 ? remaining : 0}`);
+      return; 
+    }
+
+    // 3. TARİH KONTROLÜ (UI'da tarih seçici olmadığı için zaten bugüne ekliyor ama biz yine de logic olarak buradayız)
+    // Kullanıcıya tarih seçtirmediğimiz için sistem zaten "bugün" olarak kaydedecektir.
+    
     await fetch('http://localhost:5001/api/questions', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: currentUser, lesson: qLesson, topic: qTopic, count: parseInt(qCount) })
+      body: JSON.stringify({ username: currentUser, lesson: qLesson, topic: qTopic, count: countVal })
     });
-    setQCount(''); fetchQuestions();
+    
+    setQCount(''); 
+    fetchQuestions();
   };
+  // -------------------------------------------
 
   const deleteQuestion = async (id) => {
     if (!confirm("Silinsin mi?")) return;
@@ -98,7 +122,7 @@ export default function QuestionTracker({ currentUser }) {
               </select>
             </div>
 
-            {/* KONU SEÇİMİ (OTOMATİK GELİYOR ARTIK) */}
+            {/* KONU SEÇİMİ */}
             <div style={{display:'flex', flexDirection:'column', gap:'5px'}}>
               <label style={{ fontSize: '12px', color: '#94a3b8' }}>Konu:</label>
               <select style={inputStyle} value={qTopic} onChange={e => setQTopic(e.target.value)}>
