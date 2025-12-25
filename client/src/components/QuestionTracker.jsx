@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { PlusCircle, Target, Trash2, Filter, Layers } from 'lucide-react';
+import { PlusCircle, Target, Trash2, Filter, Layers, AlertCircle } from 'lucide-react'; // AlertCircle eklendi
 import { curriculum, lessonsList } from '../data'; 
 
 export default function QuestionTracker({ currentUser }) {
@@ -18,60 +18,97 @@ export default function QuestionTracker({ currentUser }) {
   };
 
   const fetchQuestions = async () => {
-    const res = await fetch(`http://localhost:5001/api/questions?username=${currentUser}`);
-    setQuestions(await res.json());
+    try {
+      const res = await fetch(`http://localhost:5001/api/questions?username=${currentUser}`);
+      if (res.ok) {
+        setQuestions(await res.json());
+      }
+    } catch (error) {
+      console.error("Veri çekme hatası:", error);
+    }
   };
 
   useEffect(() => { fetchQuestions(); }, [currentUser]);
 
-  // --- SORU EKLEME FONKSİYONU (DÜZENLENDİ) ---
+  // --- GELİŞTİRİLMİŞ SORU EKLEME FONKSİYONU ---
   const addQuestion = async () => {
     const countVal = parseInt(qCount);
 
-    // 1. Temel Giriş Kontrolü
-    if (!qCount || countVal <= 0) return alert("Lütfen geçerli bir soru sayısı girin!");
-
-    // 2. LİMİT KONTROLÜ (Mantık: Bu konu için toplam 120 soru sınırı)
-    // Önce bu ders ve bu konu için veritabanında kayıtlı olan toplam soru sayısını buluyoruz.
-    const existingTotal = questions
-      .filter(q => q.lesson === qLesson && q.topic === qTopic)
-      .reduce((acc, curr) => acc + curr.count, 0);
-
-    // Eğer (Mevcut Toplam + Yeni Girilen) > 120 ise işlemi durdur.
-    if (existingTotal + countVal > 120) {
-      const remaining = 120 - existingTotal;
-      alert(`UYARI: "${qTopic}" konusu için maksimum 120 soru limiti vardır.\n\nŞu anki toplam: ${existingTotal}\nEkleyebileceğiniz maksimum miktar: ${remaining > 0 ? remaining : 0}`);
-      return; 
+    // 1. BOŞ GİRİŞ KONTROLÜ
+    if (!qCount || isNaN(countVal) || countVal <= 0) {
+      return alert("Lütfen geçerli bir soru sayısı girin!");
     }
 
-    // 3. TARİH KONTROLÜ (UI'da tarih seçici olmadığı için zaten bugüne ekliyor ama biz yine de logic olarak buradayız)
-    // Kullanıcıya tarih seçtirmediğimiz için sistem zaten "bugün" olarak kaydedecektir.
-    
-    await fetch('http://localhost:5001/api/questions', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: currentUser, lesson: qLesson, topic: qTopic, count: countVal })
-    });
-    
-    setQCount(''); 
-    fetchQuestions();
+    // 2. TEK SEFERDE MAKSİMUM GİRİŞ LİMİTİ (Kesin Engel)
+    if (countVal > 120) {
+      return alert("❌ HATA: Tek seferde en fazla 120 soru girişi yapabilirsiniz!\n(Gerçekçi olalım, tek oturuşta 500 soru çözmedin 😉)");
+    }
+
+    // 3. GÜNLÜK TOPLAM LİMİT KONTROLÜ (Bugün + Bu Konu)
+    // Bugünün tarihini al (Format: 'DD.MM.YYYY' - Backendi'n formatına uyumlu olmalı)
+    const todayStr = new Date().toLocaleDateString(); 
+
+    // Sadece BUGÜN, SEÇİLİ DERS ve SEÇİLİ KONU için girilmiş soruları bul
+    const todayEntries = questions.filter(q => 
+      q.lesson === qLesson && 
+      q.topic === qTopic && 
+      q.date === todayStr // Backendden gelen tarih formatıyla eşleşmeli
+    );
+
+    // Bugün bu konu için toplam kaç soru girilmiş?
+    const currentDailyTotal = todayEntries.reduce((acc, curr) => acc + curr.count, 0);
+
+    // Eğer (Mevcut Günlük Toplam + Yeni Girilen) > 120 ise DURDUR.
+    if (currentDailyTotal + countVal > 120) {
+      const remainingLimit = 120 - currentDailyTotal;
+      return alert(`⚠️ GÜNLÜK LİMİT AŞIMI\n\nBu konu (${qTopic}) için bugün zaten ${currentDailyTotal} soru girdin.\nGünlük limit 120 sorudur.\n\nKalan hakkın: ${remainingLimit > 0 ? remainingLimit : 0}`);
+    }
+
+    // KONTROLLER GEÇİLDİ, KAYDET
+    try {
+      const res = await fetch('http://localhost:5001/api/questions', {
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: currentUser, lesson: qLesson, topic: qTopic, count: countVal })
+      });
+      
+      if (res.ok) {
+        setQCount(''); 
+        fetchQuestions(); // Listeyi güncelle
+      }
+    } catch (error) {
+      console.error("Kayıt hatası:", error);
+    }
   };
   // -------------------------------------------
 
   const deleteQuestion = async (id) => {
-    if (!confirm("Silinsin mi?")) return;
+    if (!confirm("Bu kaydı silmek istediğine emin misin?")) return;
     await fetch(`http://localhost:5001/api/questions/${id}`, { method: 'DELETE' });
     fetchQuestions();
   };
 
-  // --- ANALİZ ---
+  // --- ANALİZ KISMI ---
   const filteredQuestions = questions.filter(q => filterLesson === 'TÜM DERSLER' ? true : q.lesson === filterLesson);
+  
+  // Aylık toplam hesaplama
   const currentMonth = new Date().getMonth();
-  const monthlyQuestions = filteredQuestions.filter(q => new Date(q.timestamp).getMonth() === currentMonth);
+  const monthlyQuestions = filteredQuestions.filter(q => {
+    // Tarih formatı hatasını önlemek için güvenli kontrol
+    if(!q.timestamp && !q.date) return false;
+    const dateObj = q.timestamp ? new Date(q.timestamp) : new Date(); // Timestamp yoksa şu anı al (fallback)
+    return dateObj.getMonth() === currentMonth;
+  });
+  
   const totalQuestions = monthlyQuestions.reduce((acc, curr) => acc + curr.count, 0);
 
+  // Grafik verisi hazırlama
   const chartDataRaw = {};
   monthlyQuestions.forEach(q => {
-    const shortDate = q.date.split('.').slice(0, 2).join('.');
+    // Tarih formatı DD.MM.YYYY varsayılıyor
+    const dateParts = q.date ? q.date.split('.') : [];
+    const shortDate = dateParts.length >= 2 ? `${dateParts[0]}.${dateParts[1]}` : '??';
+    
     if (!chartDataRaw[shortDate]) chartDataRaw[shortDate] = { total: 0, details: [] };
     chartDataRaw[shortDate].total += q.count;
     chartDataRaw[shortDate].details.push({ lesson: q.lesson, topic: q.topic, count: q.count });
@@ -107,11 +144,14 @@ export default function QuestionTracker({ currentUser }) {
   return (
     <div style={{ width: '100%', color: 'white' }}>
       <h2 style={{ fontSize: '1.5rem', marginBottom: '20px', color: '#8b5cf6', display: 'flex', gap: '10px' }}><Target /> Soru Takip & Analiz</h2>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '20px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
         
         {/* SOL: GİRİŞ */}
         <div style={cardStyle}>
-          <h3 style={{ marginBottom: '15px', color: '#a78bfa' }}>Yeni Kayıt</h3>
+          <h3 style={{ marginBottom: '15px', color: '#a78bfa', display:'flex', alignItems:'center', gap:'8px' }}>
+             Yeni Kayıt 
+             <span style={{fontSize:'10px', background:'#334155', padding:'2px 6px', borderRadius:'4px', color:'#94a3b8'}}>Max 120/Gün</span>
+          </h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
             
             {/* DERS SEÇİMİ */}
@@ -132,7 +172,7 @@ export default function QuestionTracker({ currentUser }) {
             
             <div style={{display:'flex', flexDirection:'column', gap:'5px'}}>
               <label style={{ fontSize: '12px', color: '#94a3b8' }}>Soru Sayısı:</label>
-              <input type="number" placeholder="Örn: 50" style={inputStyle} value={qCount} onChange={e => setQCount(e.target.value)} />
+              <input type="number" placeholder="Max: 120" style={inputStyle} value={qCount} onChange={e => setQCount(e.target.value)} />
             </div>
             <button style={buttonStyle} onClick={addQuestion}><PlusCircle size={16} style={{marginRight:'5px', display:'inline'}}/> KAYDET</button>
           </div>
@@ -153,7 +193,7 @@ export default function QuestionTracker({ currentUser }) {
         {/* SAĞ: GRAFİK */}
         <div style={cardStyle}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap:'wrap', gap:'10px' }}>
-            <div><h3 style={{ color: '#a78bfa', display:'flex', alignItems:'center', gap:'10px' }}><Layers size={18}/> Performans Analizi</h3></div>
+            <div><h3 style={{ color: '#a78bfa', display:'flex', alignItems:'center', gap:'10px' }}><Layers size={18}/> Performans</h3></div>
             <div style={{display:'flex', gap:'10px', alignItems:'center'}}>
                <Filter size={16} color='#94a3b8'/>
                <select style={{...inputStyle, width:'180px', padding:'8px', fontSize:'13px'}} value={filterLesson} onChange={e => setFilterLesson(e.target.value)}>
