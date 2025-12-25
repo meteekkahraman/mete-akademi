@@ -20,5 +20,5 @@ app.use('/api', require('./routes/social')); // Odalar, Liderlik, Arkadaşlar
 app.use('/api/admin', require('./routes/admin')); // Admin
 
 // Sunucuyu Dinle
-const PORT = process.env.PORT || 5001;
+const PORT = process.env.PORT || 5002;
 app.listen(PORT, () => console.log(`✅ Sunucu ${PORT} portunda çalışıyor`));
