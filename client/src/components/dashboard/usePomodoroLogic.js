@@ -5,60 +5,58 @@ import { lessonsList } from '../../data';
 export const usePomodoroLogic = (currentUser, onSessionComplete) => {
   const [pomoActive, setPomoActive] = useState(false);
   const [pomoMode, setPomoMode] = useState('work');
+  // Varsayılan 25 dk
   const [pomoTime, setPomoTime] = useState({ hours: 0, minutes: 25, seconds: 0 });
   const [pomoLesson, setPomoLesson] = useState(lessonsList[0]);
   
-  // Süreyi hafızada tutan Ref
+  // Süreyi hafızada tutacak kutu
   const sessionDurationRef = useRef(25);
 
-  // --- ÖZEL BAŞLATMA FONKSİYONU (INTERCEPTOR) ---
-  // Pomodoro bileşeni "Başlat" dediğinde aslında bu çalışacak.
-  const handleSetPomoActive = (val) => {
-    // Gelen değer fonksiyon mu (prev => !prev) yoksa düz değer mi?
-    const newState = typeof val === 'function' ? val(pomoActive) : val;
+  // --- 1. SAYAÇ BAŞLADIĞI AN SÜREYİ KİLİTLE ---
+  useEffect(() => {
+    if (pomoActive) {
+      // Sayaç aktifleştiği an (Play butonuna basınca) burası çalışır.
+      // O anki saat, dakika ve saniyeyi alıp toplam dakikaya çeviririz.
+      const h = Number(pomoTime.hours) || 0;
+      const m = Number(pomoTime.minutes) || 0;
+      const s = Number(pomoTime.seconds) || 0;
+      
+      // Saniye varsa 1 dk yukarı yuvarla (Örn: 0:30 -> 1 dk)
+      let totalMinutes = (h * 60) + m + (s > 0 ? 1 : 0);
 
-    // Eğer sayaç BAŞLIYORSA (False -> True geçişi)
-    if (newState === true && !pomoActive) {
-       // 1. Tüm sayıları garantiye al (String gelirse patlamasın)
-       const h = Number(pomoTime.hours) || 0;
-       const m = Number(pomoTime.minutes) || 0;
-       const s = Number(pomoTime.seconds) || 0;
+      // Eğer hesap 0 çıkarsa (örn hata olduysa) en azından 1 dk kabul et
+      if (totalMinutes <= 0) totalMinutes = 1;
 
-       // 2. Dakika hesabı (Saniye varsa 1 dk yukarı yuvarla)
-       let total = (h * 60) + m + (s > 0 ? 1 : 0);
-
-       console.log("SAYAÇ BAŞLATILDI - Algılanan Süre:", total, "dk");
-
-       // 3. Sadece gerçekten 0 ise 25 yap (Güvenlik)
-       // Eğer 1 ise 1 kalır.
-       if (total <= 0) total = 25; 
-       
-       sessionDurationRef.current = total;
+      console.log(`⏱️ SAYAÇ BAŞLADI: Hedef süre ${totalMinutes} dakika olarak kilitlendi.`);
+      sessionDurationRef.current = totalMinutes;
     }
+  }, [pomoActive]); // Sadece active değişince (Başlat/Durdur) çalışır
 
-    // Son olarak asıl state'i güncelle
-    setPomoActive(newState);
-  };
-
-  // Geri Sayım Mantığı (Interval)
+  // --- 2. GERİ SAYIM MANTIĞI ---
   useEffect(() => {
     let interval = null;
     if (pomoActive) {
       interval = setInterval(() => {
         setPomoTime(prev => {
           let { hours, minutes, seconds } = prev;
+
+          // Süre bitti mi?
+          if (hours === 0 && minutes === 0 && seconds === 0) {
+            clearInterval(interval);
+            // Durum güncellemesi (State update)
+            // Önce active'i false yapma işlemini güvenli bir şekilde dışarı alıyoruz
+            return prev; 
+          }
+
           if (seconds === 0) {
             if (minutes === 0) {
-              if (hours === 0) {
-                clearInterval(interval);
-                // Burada kendi handleSetPomoActive'imizi değil, 
-                // doğrudan state setter'ı çağırabiliriz veya false göndeririz.
-                setPomoActive(false); 
-                finishSession();
-                return prev;
-              } else { hours--; minutes = 59; seconds = 59; }
-            } else { minutes--; seconds = 59; }
-          } else seconds--;
+              hours--; minutes = 59; seconds = 59;
+            } else {
+              minutes--; seconds = 59;
+            }
+          } else {
+            seconds--;
+          }
           return { hours, minutes, seconds };
         });
       }, 1000);
@@ -66,12 +64,26 @@ export const usePomodoroLogic = (currentUser, onSessionComplete) => {
     return () => clearInterval(interval);
   }, [pomoActive]);
 
+  // --- 3. SÜRE BİTİMİNİ KONTROL ET ---
+  // Yukarıdaki interval içinde state değiştirmek bazen sorun yaratır.
+  // Bu yüzden sürenin 00:00:00 olduğunu ayrıca dinliyoruz.
+  useEffect(() => {
+    if (pomoActive && pomoTime.hours === 0 && pomoTime.minutes === 0 && pomoTime.seconds === 0) {
+      // Süre gerçekten bitti!
+      setPomoActive(false);
+      finishSession();
+    }
+  }, [pomoTime, pomoActive]);
+
+  // --- 4. KAYIT FONKSİYONU ---
   const finishSession = async () => {
-    // alert("Tebrikler! Çalışma tamamlandı."); // İstersen açabilirsin
-    
     // Hafızadaki kilitli süreyi al
     const realDuration = sessionDurationRef.current;
-    console.log("KAYIT EDİLİYOR - Süre:", realDuration);
+    
+    // Tarayıcı uyarısı
+    // alert yerine window.alert kullanarak garantiye alıyoruz
+    // setTimeout ile React döngüsünün dışına itiyoruz ki UI donmasın
+    setTimeout(() => window.alert(`✅ Süre Doldu! ${realDuration} dakikalık çalışma kaydedildi.`), 100);
 
     try {
       const res = await fetch('http://localhost:5002/api/studylogs', {
@@ -80,21 +92,27 @@ export const usePomodoroLogic = (currentUser, onSessionComplete) => {
         body: JSON.stringify({
           username: currentUser,
           lesson: pomoLesson,
-          topic: 'Odaklanma',
+          topic: 'Odaklanma', // veya seçili konu
           type: 'pomodoro',
           duration: realDuration
         })
       });
-      const data = await res.json();
-      if (onSessionComplete) onSessionComplete(data);
+      
+      if (res.ok) {
+        const data = await res.json();
+        console.log("Kayıt Başarılı:", data);
+        if (onSessionComplete) onSessionComplete(data);
+      } else {
+        console.error("Kayıt başarısız oldu.");
+      }
+      
     } catch (error) {
-      console.error("Pomodoro kayıt hatası:", error);
+      console.error("Fetch Hatası:", error);
     }
   };
 
   return {
-    pomoActive, 
-    setPomoActive: handleSetPomoActive, // <-- SİHİRLİ DOKUNUŞ: Wrapper'ı gönderiyoruz
+    pomoActive, setPomoActive,
     pomoMode, setPomoMode,
     pomoTime, setPomoTime,
     pomoLesson, setPomoLesson

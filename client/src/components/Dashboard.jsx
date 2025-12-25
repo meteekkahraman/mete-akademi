@@ -1,14 +1,12 @@
 // client/src/components/Dashboard.jsx
 import React, { useState, useEffect } from 'react';
 import { lessonsList } from '../data';
+import { usePomodoroLogic } from './dashboard/usePomodoroLogic'; // Yeni dosya yolu
 
 // Alt Bileşenler
 import DashboardHeader from './dashboard/DashboardHeader';
 import NetSection from './dashboard/NetSection';
 import ProgramSection from './dashboard/ProgramSection';
-// Mantık Dosyasını Buradan Çekiyoruz
-import { usePomodoroLogic } from './dashboard/usePomodoroLogic';
-
 import Pomodoro from './Pomodoro';
 import History from './History';
 import QuestionTracker from './QuestionTracker';
@@ -22,34 +20,44 @@ export default function Dashboard({ currentUser, userRole, onLogout }) {
   const [title, setTitle] = useState('Çaylak');
   const [studyLogs, setStudyLogs] = useState([]);
 
-  // Veri Çekme
+  // --- VERİ ÇEKME (GEÇMİŞİN GERİ GELMESİ İÇİN) ---
   const fetchLogs = async () => { 
     try { 
+      // BURAYA DİKKAT: Port 5002 olmalı
       const res = await fetch(`http://localhost:5002/api/studylogs?username=${currentUser}`); 
-      setStudyLogs(await res.json()); 
-    } catch(e) { setStudyLogs([]); } 
+      
+      if (res.ok) {
+        const data = await res.json();
+        setStudyLogs(data); // Veriyi state'e at
+      } else {
+        console.error("Veri çekilemedi, durum kodu:", res.status);
+      }
+    } catch(e) { 
+      console.error("Dashboard Veri Hatası:", e);
+      // Hata olsa bile boş array atayalım ki harita patlamasın
+      setStudyLogs([]); 
+    } 
   };
 
+  // Sayfa açılınca verileri çek
   useEffect(() => { fetchLogs(); }, [currentUser]);
 
-  // --- POMODORO SONUÇ YÖNETİMİ ---
-  // Pomodoro bitince ne olacak? (XP güncelle, listeyi yenile)
+  // Pomodoro bitince listeyi güncelle
   const handlePomoComplete = (data) => {
     setXp(data.newXP);
     setTitle(data.newTitle);
-    fetchLogs();
+    fetchLogs(); // <-- İşte bu fonksiyon geçmiş listesini yeniler
   };
 
-  // --- TÜM SAYAÇ MANTIĞINI TEK SATIRDA ÇAĞIRIYORUZ ---
+  // Mantık Hook'u
   const pomoState = usePomodoroLogic(currentUser, handlePomoComplete);
 
-  // Güvenli Çıkış
   const handleSafeLogout = async () => {
     try {
       await fetch('http://localhost:5002/api/rooms/leave', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: currentUser })
       });
-    } catch (e) { console.error(e); }
+    } catch (e) {}
     onLogout();
   };
 
@@ -58,14 +66,9 @@ export default function Dashboard({ currentUser, userRole, onLogout }) {
 
   return (
     <div style={containerStyle}>
-      <DashboardHeader 
-        currentUser={currentUser} xp={xp} title={title} 
-        activeTab={activeTab} setActiveTab={setActiveTab} 
-        handleSafeLogout={handleSafeLogout} userRole={userRole}
-      />
+      <DashboardHeader currentUser={currentUser} xp={xp} title={title} activeTab={activeTab} setActiveTab={setActiveTab} handleSafeLogout={handleSafeLogout} userRole={userRole}/>
 
       <div style={contentContainerStyle}>
-        
         {activeTab === 'dashboard' && (
           <div style={{ display:'flex', flexDirection:'column' }}>
             <NetSection currentUser={currentUser} />
@@ -76,7 +79,7 @@ export default function Dashboard({ currentUser, userRole, onLogout }) {
         {activeTab === 'subject' && <SubjectTracker currentUser={currentUser} />}
         {activeTab === 'questions' && <QuestionTracker currentUser={currentUser} />}
         
-        {/* Pomodoro'ya tüm yeteneklerini 'pomoState' paketiyle veriyoruz */}
+        {/* Pomodoro'ya state'i aktar */}
         {activeTab === 'pomodoro' && (
           <Pomodoro 
              currentUser={currentUser} 
@@ -88,7 +91,6 @@ export default function Dashboard({ currentUser, userRole, onLogout }) {
         {activeTab === 'medya' && <Medya currentUser={currentUser}/>}
         {activeTab === 'history' && <History studyLogs={studyLogs}/>}
         {activeTab === 'admin' && <AdminPanel />}
-
       </div>
     </div>
   );
