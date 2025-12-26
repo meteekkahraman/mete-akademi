@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { lessonsList } from '../data';
 
 // --- GÜVENLİ URL ---
-const API_URL = 'http://localhost:5002';
+const API_URL = 'hhttp://127.0.0.1:5002';
 
 // Alt Bileşenler
 import DashboardHeader from './dashboard/DashboardHeader';
