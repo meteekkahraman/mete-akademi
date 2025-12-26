@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { lessonsList } from '../data';
 
-// --- SABİT URL (Hata riskini sıfıra indirmek için) ---
+// --- GÜVENLİ URL ---
 const API_URL = 'http://localhost:5002';
 
 // Alt Bileşenler
@@ -21,89 +21,73 @@ export default function Dashboard({ currentUser, userRole, onLogout }) {
   const [xp, setXp] = useState(0);
   const [title, setTitle] = useState('Çaylak');
   const [studyLogs, setStudyLogs] = useState([]);
+  
+  // DEBUG STATE (Hata Takibi İçin)
+  const [lastSaveStatus, setLastSaveStatus] = useState("Henüz işlem yok");
+  const [debugError, setDebugError] = useState(null);
 
-  // --- POMODORO SAYAÇ STATE'LERİ ---
+  // --- POMODORO STATE ---
   const [pomoActive, setPomoActive] = useState(false);
   const [pomoMode, setPomoMode] = useState('work');
-  // Varsayılan 25 dakika
   const [pomoTime, setPomoTime] = useState({ hours: 0, minutes: 25, seconds: 0 });
   const [pomoLesson, setPomoLesson] = useState(lessonsList[0]);
 
-  // 🔥 SÜREYİ HAFIZADA TUTAN DEĞİŞKEN 🔥
+  // 🔥 SÜRE HAFIZASI (REF) 🔥
   const durationRef = useRef(25);
 
   // --- VERİ ÇEKME ---
   const fetchLogs = async () => { 
-    console.log("📥 Geçmiş verileri çekiliyor...");
     try { 
       const res = await fetch(`${API_URL}/api/studylogs?username=${currentUser}`); 
       if (res.ok) {
         const data = await res.json();
         setStudyLogs(data);
-        console.log(`✅ ${data.length} kayıt çekildi.`);
+        setDebugError(null); // Hata varsa temizle
       } else {
-        console.error("❌ Veri çekme hatası. Durum:", res.status);
+        setDebugError(`Veri çekilemedi: ${res.status}`);
       }
     } catch(e) { 
-      console.error("❌ Sunucu bağlantı hatası:", e);
+      console.error(e);
+      setDebugError(`Bağlantı Hatası: ${e.message}`);
       setStudyLogs([]); 
     } 
   };
   
   useEffect(() => { fetchLogs(); }, [currentUser]);
 
-  // --- SÜRE DEĞİŞİMİNİ TAKİP ET ---
-  // Sen inputa sayı girdikçe burası çalışır ve hafızayı günceller.
+  // --- SÜRE DEĞİŞİMİNİ YAKALA ---
   useEffect(() => {
     if (!pomoActive) {
-      // String gelebileceği için Number() ile garantiye alıyoruz
       const h = Number(pomoTime.hours) || 0;
       const m = Number(pomoTime.minutes) || 0;
       const s = Number(pomoTime.seconds) || 0;
-
       const totalMinutes = (h * 60) + m + (s > 0 ? 1 : 0);
       
       if (totalMinutes > 0) {
         durationRef.current = totalMinutes;
-        // console.log("Hafızadaki Süre Güncellendi:", durationRef.current); // Çok log olmasın diye kapattım
       }
     }
   }, [pomoTime, pomoActive]);
 
-  // --- GERİ SAYIM MOTORU ---
+  // --- GERİ SAYIM ---
   useEffect(() => {
     let interval = null;
-    
     if (pomoActive) {
-      console.log(`▶️ Sayaç Başladı! Hedef Süre: ${durationRef.current} dakika`);
-      
       interval = setInterval(() => {
         setPomoTime(prev => {
           let { hours, minutes, seconds } = prev;
-
-          // Hepsi 0 ise BİTİŞ
           if (hours === 0 && minutes === 0 && seconds === 0) {
             clearInterval(interval);
-            
-            // State güncellemesi çakışmasın diye azıcık gecikmeli bitiriyoruz
             setTimeout(() => {
               setPomoActive(false);
               finishSession();
             }, 100);
-            
             return { hours: 0, minutes: 0, seconds: 0 };
           }
-
-          // Geri Sayım Matematiği
           if (seconds === 0) {
-            if (minutes === 0) {
-              hours--; minutes = 59; seconds = 59;
-            } else {
-              minutes--; seconds = 59;
-            }
-          } else {
-            seconds--;
-          }
+            if (minutes === 0) { hours--; minutes = 59; seconds = 59; } 
+            else { minutes--; seconds = 59; }
+          } else { seconds--; }
           return { hours, minutes, seconds };
         });
       }, 1000);
@@ -114,7 +98,7 @@ export default function Dashboard({ currentUser, userRole, onLogout }) {
   // --- KAYIT FONKSİYONU ---
   const finishSession = async () => {
     const realDuration = durationRef.current;
-    console.log(`💾 KAYIT BAŞLIYOR... Süre: ${realDuration} dk`);
+    setLastSaveStatus(`Kaydediliyor... (${realDuration} dk)`);
 
     try {
       const res = await fetch(`${API_URL}/api/studylogs`, { 
@@ -131,23 +115,21 @@ export default function Dashboard({ currentUser, userRole, onLogout }) {
 
       if (res.ok) {
         const data = await res.json(); 
-        console.log("✅ KAYIT BAŞARILI:", data);
+        setLastSaveStatus(`✅ BAŞARILI! ID: ${data.log ? data.log._id : 'Bilinmiyor'}`);
         alert(`Tebrikler! ${realDuration} dakikalık çalışma kaydedildi.`);
         
-        // Puan ve Başlık Güncelle
         setXp(data.newXP); 
         setTitle(data.newTitle); 
-        
-        // Listeyi Yenile
-        fetchLogs();
+        fetchLogs(); // Listeyi yenile
       } else {
-        console.error("❌ Kayıt başarısız. Sunucu hatası:", res.status);
-        alert("Hata: Kayıt sunucuya iletilemedi!");
+        const errText = await res.text();
+        setLastSaveStatus(`❌ HATA: Sunucu reddetti (${res.status}) - ${errText}`);
+        alert("Kayıt başarısız oldu!");
       }
 
     } catch (e) {
-      console.error("❌ FETCH HATASI:", e);
-      alert("Hata: Sunucuyla bağlantı kurulamadı!");
+      setLastSaveStatus(`❌ FETCH HATASI: ${e.message}`);
+      alert("Sunucuya ulaşılamadı!");
     }
   };
 
@@ -156,7 +138,7 @@ export default function Dashboard({ currentUser, userRole, onLogout }) {
     onLogout();
   };
 
-  const containerStyle = { width: '100%', minHeight:'100vh', background:'#0f172a', color:'white', overflowX: 'hidden' };
+  const containerStyle = { width: '100%', minHeight:'100vh', background:'#0f172a', color:'white', overflowX: 'hidden', paddingBottom: '100px' };
   const contentContainerStyle = { width:'100%', maxWidth:'1200px', margin:'0 auto', padding:'20px', boxSizing: 'border-box' };
 
   return (
@@ -191,6 +173,21 @@ export default function Dashboard({ currentUser, userRole, onLogout }) {
         {activeTab === 'admin' && <AdminPanel />}
 
       </div>
+
+      {/* --- TEKNİK TAKİP PANELİ (DEBUG BAR) --- */}
+      <div style={{
+        position: 'fixed', bottom: 0, left: 0, width: '100%', 
+        background: '#000', color: '#0f0', fontFamily: 'monospace', 
+        padding: '10px', fontSize: '12px', borderTop: '2px solid #0f0',
+        display: 'flex', justifyContent: 'space-around', zIndex: 9999
+      }}>
+        <span>👤 KULLANICI: <b>{currentUser || "YOK!"}</b></span>
+        <span>🔗 API: <b>{API_URL}</b></span>
+        <span>📚 VERİTABANI: <b>{studyLogs.length} Kayıt</b></span>
+        <span>💾 SON İŞLEM: <b>{lastSaveStatus}</b></span>
+        {debugError && <span style={{color:'red'}}>⚠️ {debugError}</span>}
+      </div>
+
     </div>
   );
 }
