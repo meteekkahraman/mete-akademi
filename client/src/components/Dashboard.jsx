@@ -1,7 +1,9 @@
 // client/src/components/Dashboard.jsx
-import React, { useState, useEffect, useRef } from 'react'; // useRef EKLENDİ
+import React, { useState, useEffect, useRef } from 'react';
 import { lessonsList } from '../data';
-import API_BASE_URL from '../apiConfig'; // Varsa kullan yoksa 'http://localhost:5002' yaz
+
+// --- SABİT URL (Hata riskini sıfıra indirmek için) ---
+const API_URL = 'http://localhost:5002';
 
 // Alt Bileşenler
 import DashboardHeader from './dashboard/DashboardHeader';
@@ -20,53 +22,88 @@ export default function Dashboard({ currentUser, userRole, onLogout }) {
   const [title, setTitle] = useState('Çaylak');
   const [studyLogs, setStudyLogs] = useState([]);
 
-  // --- POMODORO DEVRELERİ ---
+  // --- POMODORO SAYAÇ STATE'LERİ ---
   const [pomoActive, setPomoActive] = useState(false);
   const [pomoMode, setPomoMode] = useState('work');
+  // Varsayılan 25 dakika
   const [pomoTime, setPomoTime] = useState({ hours: 0, minutes: 25, seconds: 0 });
   const [pomoLesson, setPomoLesson] = useState(lessonsList[0]);
 
-  // 🔥 KRİTİK EKLENTİ: SÜREYİ HAFIZAYA ALAN REF 🔥
-  const sessionDurationRef = useRef(25);
+  // 🔥 SÜREYİ HAFIZADA TUTAN DEĞİŞKEN 🔥
+  const durationRef = useRef(25);
 
-  // Veri Çekme
+  // --- VERİ ÇEKME ---
   const fetchLogs = async () => { 
+    console.log("📥 Geçmiş verileri çekiliyor...");
     try { 
-      // Linki kendine göre düzenle (localhost:5002)
-      const res = await fetch(`http://localhost:5002/api/studylogs?username=${currentUser}`); 
-      setStudyLogs(await res.json()); 
-    } catch(e) { setStudyLogs([]); } 
+      const res = await fetch(`${API_URL}/api/studylogs?username=${currentUser}`); 
+      if (res.ok) {
+        const data = await res.json();
+        setStudyLogs(data);
+        console.log(`✅ ${data.length} kayıt çekildi.`);
+      } else {
+        console.error("❌ Veri çekme hatası. Durum:", res.status);
+      }
+    } catch(e) { 
+      console.error("❌ Sunucu bağlantı hatası:", e);
+      setStudyLogs([]); 
+    } 
   };
+  
   useEffect(() => { fetchLogs(); }, [currentUser]);
 
-  // --- EKLENTİ: SAYAÇ BAŞLAYINCA SÜREYİ KİLİTLE ---
+  // --- SÜRE DEĞİŞİMİNİ TAKİP ET ---
+  // Sen inputa sayı girdikçe burası çalışır ve hafızayı günceller.
   useEffect(() => {
-    if (pomoActive) {
-      // Sayaç başladığı anki dakikayı hesapla
-      const total = (pomoTime.hours * 60) + pomoTime.minutes + (pomoTime.seconds > 0 ? 1 : 0);
-      // Hafızaya yaz (Eğer 0 ise en az 1 olsun)
-      sessionDurationRef.current = total > 0 ? total : 25;
-      console.log("Kilitlenen Süre:", sessionDurationRef.current);
-    }
-  }, [pomoActive]);
+    if (!pomoActive) {
+      // String gelebileceği için Number() ile garantiye alıyoruz
+      const h = Number(pomoTime.hours) || 0;
+      const m = Number(pomoTime.minutes) || 0;
+      const s = Number(pomoTime.seconds) || 0;
 
-  // Pomodoro Timer Mantığı
+      const totalMinutes = (h * 60) + m + (s > 0 ? 1 : 0);
+      
+      if (totalMinutes > 0) {
+        durationRef.current = totalMinutes;
+        // console.log("Hafızadaki Süre Güncellendi:", durationRef.current); // Çok log olmasın diye kapattım
+      }
+    }
+  }, [pomoTime, pomoActive]);
+
+  // --- GERİ SAYIM MOTORU ---
   useEffect(() => {
     let interval = null;
+    
     if (pomoActive) {
+      console.log(`▶️ Sayaç Başladı! Hedef Süre: ${durationRef.current} dakika`);
+      
       interval = setInterval(() => {
         setPomoTime(prev => {
           let { hours, minutes, seconds } = prev;
-          if (seconds === 0) { 
-            if (minutes === 0) { 
-              if (hours === 0) { 
-                clearInterval(interval); 
-                setPomoActive(false); 
-                handlePomoFinish(); // BİTTİ
-                return prev; 
-              } else { hours--; minutes = 59; seconds = 59; } 
-            } else { minutes--; seconds = 59; } 
-          } else seconds--;
+
+          // Hepsi 0 ise BİTİŞ
+          if (hours === 0 && minutes === 0 && seconds === 0) {
+            clearInterval(interval);
+            
+            // State güncellemesi çakışmasın diye azıcık gecikmeli bitiriyoruz
+            setTimeout(() => {
+              setPomoActive(false);
+              finishSession();
+            }, 100);
+            
+            return { hours: 0, minutes: 0, seconds: 0 };
+          }
+
+          // Geri Sayım Matematiği
+          if (seconds === 0) {
+            if (minutes === 0) {
+              hours--; minutes = 59; seconds = 59;
+            } else {
+              minutes--; seconds = 59;
+            }
+          } else {
+            seconds--;
+          }
           return { hours, minutes, seconds };
         });
       }, 1000);
@@ -74,35 +111,51 @@ export default function Dashboard({ currentUser, userRole, onLogout }) {
     return () => clearInterval(interval);
   }, [pomoActive]);
 
-  const handlePomoFinish = async () => {
-    alert("Tebrikler! Çalışma tamamlandı.");
-    
-    // 🔥 DÜZELTME: SABİT 25 YERİNE HAFIZADAKİ SÜREYİ AL 🔥
-    const realDuration = sessionDurationRef.current;
+  // --- KAYIT FONKSİYONU ---
+  const finishSession = async () => {
+    const realDuration = durationRef.current;
+    console.log(`💾 KAYIT BAŞLIYOR... Süre: ${realDuration} dk`);
 
-    const res = await fetch('http://localhost:5002/api/studylogs', { 
-      method: 'POST', 
-      headers: {'Content-Type':'application/json'}, 
-      body: JSON.stringify({ 
-        username: currentUser, 
-        lesson: pomoLesson, 
-        topic: 'Odaklanma', 
-        type: 'pomodoro', 
-        duration: realDuration // <-- ARTIK DOĞRU SÜRE GİDİYOR
-      }) 
-    });
-    const data = await res.json(); 
-    setXp(data.newXP); 
-    setTitle(data.newTitle); 
-    fetchLogs();
+    try {
+      const res = await fetch(`${API_URL}/api/studylogs`, { 
+        method: 'POST', 
+        headers: {'Content-Type':'application/json'}, 
+        body: JSON.stringify({ 
+          username: currentUser, 
+          lesson: pomoLesson, 
+          topic: 'Odaklanma', 
+          type: 'pomodoro', 
+          duration: realDuration 
+        }) 
+      });
+
+      if (res.ok) {
+        const data = await res.json(); 
+        console.log("✅ KAYIT BAŞARILI:", data);
+        alert(`Tebrikler! ${realDuration} dakikalık çalışma kaydedildi.`);
+        
+        // Puan ve Başlık Güncelle
+        setXp(data.newXP); 
+        setTitle(data.newTitle); 
+        
+        // Listeyi Yenile
+        fetchLogs();
+      } else {
+        console.error("❌ Kayıt başarısız. Sunucu hatası:", res.status);
+        alert("Hata: Kayıt sunucuya iletilemedi!");
+      }
+
+    } catch (e) {
+      console.error("❌ FETCH HATASI:", e);
+      alert("Hata: Sunucuyla bağlantı kurulamadı!");
+    }
   };
 
   const handleSafeLogout = async () => {
-    try { await fetch('http://localhost:5002/api/rooms/leave', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: currentUser }) }); } catch (e) {}
+    try { await fetch(`${API_URL}/api/rooms/leave`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: currentUser }) }); } catch (e) {}
     onLogout();
   };
 
-  // Styles
   const containerStyle = { width: '100%', minHeight:'100vh', background:'#0f172a', color:'white', overflowX: 'hidden' };
   const contentContainerStyle = { width:'100%', maxWidth:'1200px', margin:'0 auto', padding:'20px', boxSizing: 'border-box' };
 
